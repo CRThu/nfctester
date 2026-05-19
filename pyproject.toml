@@ -8,7 +8,6 @@ dependencies = [
     "loguru>=0.7.3",
     "pycryptodome>=3.23.0",
     "pyserial>=3.5",
-    "pytest>=9.0.3",
 ]
 
 [tool.setuptools.packages.find]
@@ -27,6 +26,12 @@ testpaths = ["tests"]
 
 [tool.uv]
 package = true
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
+
 
 [tool.bumpversion]
 current_version = "0.0.32"
