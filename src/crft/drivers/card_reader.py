@@ -32,9 +32,27 @@ class CardReader(ABC):
     @abstractmethod
     def find(self) -> dict:
         """
-        寻卡操作。
+        寻卡操作（检测并激活卡片为活跃 Target 资源）。
         
         :return: 包含卡片标识（UID）和类型（SAK）的字典。
+        """
+        pass
+
+    @abstractmethod
+    def select(self) -> dict:
+        """
+        唤醒并重新选择卡片（重新寻卡激活Target 资源，发送WUPA）。
+        
+        :return: 包含卡片信息的字典，失败时返回 None。
+        """
+        pass
+
+    @abstractmethod
+    def deselect(self) -> bool:
+        """
+        去选卡片（逻辑去选 Target 资源，发送HLTA）。
+        
+        :return: 是否成功。
         """
         pass
 

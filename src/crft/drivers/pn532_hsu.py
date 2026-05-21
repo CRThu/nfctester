@@ -148,14 +148,34 @@ class PN532_HSU(CardReader):
         return self._req(b'\x02')
 
     def find(self) -> dict:
+        """寻卡操作（检测并激活卡片为活跃 Target 资源）"""
         self.transport.flush_input()
         res = self._req(b'\x4A\x01\x00')
         # PN532 响应格式：0xD5 0x4B [NbTg] [Tg1] ...
         if res and len(res) >= 2 and res[0] == 0x4B:
             nb_targets = res[1]
             if nb_targets > 0:
-                return {"uid": res[7:7+res[6]], "sak": res[5], "raw": res}
+                trace.debug(f"{'uid':<12}: {res[7:7+res[6]].hex(' ').upper()}")
+                trace.debug(f"{'atq':<12}: {res[3:5].hex(' ').upper()}")
+                trace.debug(f"{'sak':<12}: {hex(res[5])}")
+                trace.debug(f"{'raw':<12}: {res.hex(' ').upper()}")
+                return {"uid": res[7:7+res[6]], "atq": res[3:5], "sak": res[5], "raw": res}
         return None
+
+    def select(self) -> dict:
+        """唤醒并重新选择卡片（重新寻卡激活Target 资源，发送WUPA）"""
+        try:
+            self._req(b'\x52\x01')
+        except Exception:
+            pass
+        return self.find()
+
+    def deselect(self) -> bool:
+        """去选 Target 1 卡片（逻辑去选 Target 资源，发送HLTA）"""
+        res = self._req(b'\x44\x01')
+        if res and len(res) >= 2 and res[0] == 0x45:
+            return res[1] == 0x00
+        return False
 
     def set_crc(self, tx_enabled: bool, rx_enabled: bool):
         """
