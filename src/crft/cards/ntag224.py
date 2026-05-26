@@ -5,9 +5,9 @@ from crft.utils import BitOps
 from crft.trace import trace
 
 
-class NTAG22x(Type2Tag):
+class NTAG224(Type2Tag):
     """
-    NXP NTAG22x DNA 系列专用驱动 (如 NTAG223, NTAG224)
+    NXP NTAG224 DNA 系列专用驱动
     """
 
     CMD_GET_VERSION = 0x60
@@ -53,7 +53,7 @@ class NTAG22x(Type2Tag):
         :param password: 16 字节密码
         """
         if len(password) != 16:
-            raise ValueError("NTAG22x password must be 16 bytes")
+            raise ValueError("NTAG224 password must be 16 bytes")
 
         crypto = AES128Crypto()
 
