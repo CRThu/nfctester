@@ -27,6 +27,15 @@ class CardReader(ABC):
         :param tx_enabled: 是否开启自动封装 CRC
         :param rx_enabled: 是否开启自动解析 CRC
         """
+        pass
+
+    @abstractmethod
+    def set_rf_field(self, enabled: bool):
+        """
+        开启或关闭读卡器的 RF 场。
+        :param enabled: True 开启，False 关闭。
+        """
+        pass
 
 
     @abstractmethod

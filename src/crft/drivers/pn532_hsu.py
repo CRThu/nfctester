@@ -188,6 +188,17 @@ class PN532_HSU(CardReader):
         self._modify_reg(0x6303, 0x80, 0x80 if rx_enabled else 0x00)
         # self.trace.debug(f"PN532 CRC 配置: TX={tx_enabled}, RX={rx_enabled}")
 
+    def set_rf_field(self, enabled: bool):
+        """
+        开关 PN532 的 RF 场。
+        :param enabled: True 开启 RF 场，False 关闭 RF 场
+        """
+        # CfgItem 0x01: RF field
+        # Data 0x01: On, 0x00: Off
+        cmd = b'\x32\x01' + (b'\x01' if enabled else b'\x00')
+        self._req(cmd)
+        self.trace.debug(f"PN532 RF 场: {'开启' if enabled else '关闭'}")
+
     def exchange(self, data: bytes) -> bytes:
         """封装 PN532 的 InDataExchange 指令发送给卡片"""
         self.trace.protocol(tx=data)
