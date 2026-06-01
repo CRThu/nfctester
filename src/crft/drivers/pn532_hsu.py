@@ -199,6 +199,17 @@ class PN532_HSU(CardReader):
         self._req(cmd)
         self.trace.debug(f"PN532 RF 场: {'开启' if enabled else '关闭'}")
 
+    def get_rf_field(self) -> bool:
+        """
+        通过读取 0x6304 寄存器判断物理天线驱动状态。
+        """
+        reg_val = self._read_reg(0x6304)
+        if reg_val is not None:
+            # Bit 1 (Tx2RFEn) | Bit 0 (Tx1RFEn)
+            # 只要任意一个驱动使能，物理 RF 场就应处于开启状态
+            return (reg_val & 0x03) != 0
+        return False
+
     def exchange(self, data: bytes) -> bytes:
         """封装 PN532 的 InDataExchange 指令发送给卡片"""
         self.trace.protocol(tx=data)

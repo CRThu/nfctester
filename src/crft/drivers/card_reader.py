@@ -37,6 +37,14 @@ class CardReader(ABC):
         """
         pass
 
+    @abstractmethod
+    def get_rf_field(self) -> bool:
+        """
+        获取物理天线驱动是否处于开启状态。
+        :return: True 开启，False 关闭。
+        """
+        pass
+
 
     @abstractmethod
     def find(self) -> dict:
