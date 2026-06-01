@@ -29,12 +29,12 @@ def run_scanner():
         trace.info("开始循环寻卡 (按 Ctrl+C 退出)...")
         while True:
             # 5. 寻卡
-            tag = reader.poll_tag()
+            tag = reader.find()
             if tag:
                 uid = tag['uid'].hex(' ').upper()
+                atq = tag['atq'].hex(' ').upper()
                 sak = tag['sak']
-                trace.success(f"发现卡片! UID: {uid} | SAK: 0x{sak:02X}")
-            
+                trace.success(f"发现卡片! UID: {uid} | ATQ: {atq} | SAK: 0x{sak:02X}")
             # 降低轮询频率
             time.sleep(0.5)
             

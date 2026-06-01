@@ -269,6 +269,8 @@ class PN532_HSU(CardReader):
                 self.trace.warning(f"InCommunicateThru 返回错误状态: 0x{res[1]:02X} ({err_msg})")
                 self.trace.protocol(rx=res[2:])
                 return res[2:]
+        else:
+            self.trace.warning(f"InCommunicateThru 未返回完整帧")
         return None
 
     def disconnect(self):

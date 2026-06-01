@@ -23,12 +23,6 @@ _CMDS = {
 }
 
 _STATUS = {
-    0x00: "Success",         0x01: "Time Out",         0x02: "CRC Error",
-    0x03: "Parity Error",    0x04: "Wrong Bit Count",  0x05: "Framing Error",
-    0x06: "Collision Bit",   0x07: "Buffer Overflow",  0x09: "RF Buffer Overflow",
-    0x0A: "RF Field Not On", 0x0B: "RF Protocol Error",0x0D: "Temperature Error",
-    0x0E: "Internal Overflow",0x10: "Invalid Parameter",0x12: "DEP Invalid Command",
-    0x13: "DEP Invalid Format",0x14: "Auth Error",
 }
 
 # 特殊帧字节序列
