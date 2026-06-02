@@ -104,6 +104,22 @@ class PN532_HSU(CardReader):
             return res[1]
         return None
 
+    def _dump_registers(self) -> dict:
+        """读取指定范围的寄存器并以字典形式返回"""
+        ranges = [
+            (0x6301, 0x630E),
+            (0x6311, 0x631F),
+            (0x6321, 0x632B),
+            (0x632F, 0x633E),
+        ]
+        results = {}
+        for start, end in ranges:
+            for addr in range(start, end + 1):
+                val = self._read_reg(addr)
+                if val is not None:
+                    results[hex(addr)] = hex(val)
+        return results
+
     def _write_reg(self, address: int, value: int):
         """私有寄存器写入：0x08 (WriteRegister), ADR_H, ADR_L, VAL"""
         cmd = bytes([0x08, (address >> 8) & 0xFF, address & 0xFF, value & 0xFF])
@@ -141,6 +157,12 @@ class PN532_HSU(CardReader):
         Byte 3: MxRtyPassiveActivation (设为 0x01，即重试一次，保证卡片多次REQA可成功进入ACTIVE)
         """
         self._req(b'\x32\x05\x01\x01\x01') 
+
+        # 配置 Force100ASK (CIU_TxAuto 0x6305, bit 6)
+        self._modify_reg(0x6305, 0x40, 0x40)
+
+        # 配置 Initiator 模式 (CIU_Control 0x633C, bit 4)
+        self._modify_reg(0x633C, 0x10, 0x10)
 
         self.trace.success("PN532 HSU 初始化成功")
 

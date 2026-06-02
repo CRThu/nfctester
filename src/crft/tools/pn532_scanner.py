@@ -28,7 +28,7 @@ def run_scanner():
         
         trace.info("开始循环寻卡 (按 Ctrl+C 退出)...")
         while True:
-            # 5. 寻卡
+            # 寻卡
             tag = reader.find()
             if tag:
                 uid = tag['uid'].hex(' ').upper()
@@ -37,7 +37,31 @@ def run_scanner():
                 trace.success(f"发现卡片! UID: {uid} | ATQ: {atq} | SAK: 0x{sak:02X}")
             # 降低轮询频率
             time.sleep(0.5)
+
+            # reader.set_crc(True, False)
+            # response = reader.transceive(b'\x50\x00')
+            # if response:
+            #     trace.success(f"收到响应 (ATQA) [cmd {b'\x50\x00'.hex().upper()}]: {response.hex(' ').upper()}")
+            # time.sleep(0.5)
             
+            # reader.set_crc(False, False)
+            # response = reader.transceive(b'\x52', last_tx_bits=7)
+            # if response:
+            #     trace.success(f"收到响应 (ATQA) [cmd {b'\x52'.hex().upper()}]: {response.hex(' ').upper()}")
+            # time.sleep(0.5)
+
+            # reader.set_rf_field(False)
+            # time.sleep(0.5)
+            # reader.set_rf_field(True)
+            # time.sleep(0.5)
+
+            # reader.set_crc(False, False)
+            # response = reader.transceive(b'\x26', last_tx_bits=7)
+            # if response:
+            #     trace.success(f"收到响应 (ATQA) [cmd {b'\x26'.hex().upper()}]: {response.hex(' ').upper()}")
+            # time.sleep(0.5)
+
+
     except KeyboardInterrupt:
         trace.info("扫描已停止。")
     except Exception as e:
