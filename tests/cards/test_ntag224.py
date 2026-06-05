@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from crft.cards import NTAG224
+from nfctester.cards import NTAG224
 
 # --- Mock Tests ---
 def test_ntag224_auth_mock():

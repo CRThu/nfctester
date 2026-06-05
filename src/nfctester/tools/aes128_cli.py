@@ -1,6 +1,6 @@
 import argparse
 import sys
-from crft.crypto import AES128Crypto
+from nfctester.crypto import AES128Crypto
 
 def main():
     parser = argparse.ArgumentParser(description="AES-128 CLI Tool")

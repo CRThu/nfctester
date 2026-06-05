@@ -1,5 +1,5 @@
 from typing import Callable
-from crft.parsers import BaseParser
+from nfctester.parsers import BaseParser
 from .formatter import TraceFormatter
 
 

@@ -1,18 +1,18 @@
-# CarrotRFIDTester 架构说明书 (AI 专用)
+# nfctester 架构说明书 (AI 专用)
 
 ## 1. 项目概述
-`CarrotRFIDTester` 是一个用于测试 RFID 卡片和 PN532 读卡器的自动化测试框架。项目采用分层架构，旨在实现硬件通信、芯片驱动、卡片逻辑与加密算法的解耦。
+`nfctester` 是一个用于测试 RFID 卡片和 PN532 读卡器的自动化测试框架。项目采用分层架构，旨在实现硬件通信、芯片驱动、卡片逻辑与加密算法的解耦。
 
 ## 2. 八层架构体系
 
 ### 第一层：硬件传输层 (Hardware/Transport Layer)
-*   **目录**: `src/crft/hardware/`
+*   **目录**: `src/nfctester/hardware/`
 *   **职责**: 负责底层的字节流传输。
 *   **核心类**: `SerialTransport` (处理 RS232/HSU 串口通信)。
 *   **设计原则**: 定义统一的 `BaseTransport` 接口，以便后续扩展 TCP/IP 或 USB 传输。
 
 ### 第二层：驱动层 (Driver Layer)
-*   **目录**: `src/crft/drivers/`
+*   **目录**: `src/nfctester/drivers/`
 *   **职责**: 实现特定芯片的协议封装（如 PN532 的 NXP 标准帧格式）。
 *   **核心类**: `PN532_HSU`。
 *   **逻辑**: 包含 ACK 处理、唤醒序列（Wakeup）、以及读取/写入数据帧。
@@ -26,7 +26,7 @@
     *   `self.last_rx_bits`: 实例属性，每次 `transceive` 完成后自动更新为 `CIU_Control`（`0x633C`）的 `RxLastBits[2:0]`，供上层协议判断最后接收字节的有效位数（0 = 全字节有效）。
 
 ### 第三层：卡片逻辑层 (Card Layer)
-*   **目录**: `src/crft/cards/`
+*   **目录**: `src/nfctester/cards/`
 *   **职责**: 实现各种 RFID 卡片协议逻辑（如 ISO14443A, Mifare Classic）。
 *   **核心类**: `BaseTag`, `BaseCard`, `MifareClassicCard`, `Type2Tag`。
 *   **逻辑**: 
@@ -40,7 +40,7 @@
     *   **协议安全**: 目前依赖硬件层处理 Mifare Classic 的三轮认证，加密算法层主要提供离线的算法验证支持。
 
 ### 第四层：加密算法层 (Crypto Layer)
-*   **目录**: `src/crft/crypto/`
+*   **目录**: `src/nfctester/crypto/`
 *   **职责**: 提供卡片交互所需的底层加密/解密原子操作。
 *   **核心模块**: 
     *   `AES128Crypto`: 实现 AES-128 CBC 模式。
@@ -52,7 +52,7 @@
 
 
 ### 第五层：通用工具层 (Utility Layer)
-*   **目录**: `src/crft/utils/`
+*   **目录**: `src/nfctester/utils/`
 *   **职责**: 提供与硬件无关的通用算法或辅助函数（如 CRC 校验、数据格式转换）。
 *   **核心模块**: 
     *   `crc`: 提供 `crc_a` 等标准校验算法。
@@ -60,7 +60,7 @@
 *   **设计原则**: 保持模块化，不包含复杂类，仅提供原子函数。
 
 ### 第六层：跟踪控制层 (Trace Layer)
-*   **目录**: `src/crft/trace/`
+*   **目录**: `src/nfctester/trace/`
 *   **职责**: 提供中心化、解耦的日志处理子系统，区分物理层(driver)和协议层(protocol)的数据流监控。
 *   **核心模块**: 
     *   `manager.py`: `TraceManager` 门面类，全局单例入口；注入对应解析器到各 Handler。
@@ -69,7 +69,7 @@
 *   **设计原则**: 严禁在驱动层使用硬编码的打印语句。通信日志必须通过 `trace` 的对应层级 Handler 统一输出，实现业务与日志的严格分离。
 
 ### 第七层：协议解析层 (Parsers Layer)
-*   **目录**: `src/crft/parsers/`
+*   **目录**: `src/nfctester/parsers/`
 *   **职责**: 将字节流解析为含语义描述的结构化字段树，供 `TraceFormatter` 渲染，与日志层解耦。
 *   **数据结构**:
     *   `ParsedField`: 单个字段（名称、原始字节、数值、描述、子字段列表）。
@@ -82,7 +82,7 @@
 *   **设计原则**: 解析器只做结构化解析，不负责任何格式化输出。可通过 `TraceHandler(parser=XxxParser())` 按需注入，与具体协议无关。
 
 ### 第八层：脚本/CLI 层 (Scripts/CLI Layer)
-*   **目录**: `src/crft/tools/`
+*   **目录**: `src/nfctester/tools/`
 *   **职责**: 提供命令行接口 (CLI) 以直接调用核心加密/通信逻辑。
 *   **运行方式**: `uv run aes128-cli -m encrypt -i <hex> -k <key>`
 
@@ -99,7 +99,7 @@
         *   `tests/drivers/`: 硬件驱动层测试。
         *   `tests/utils/`: 通用工具层测试（如 CRC 校验）。
     *   执行特定模块测试: `uv run pytest tests/crypto/`
-*   **配置**: 硬件参数（如 COM 端口）应通过环境变量 `CRFT_PORT` 或配置文件读取，严禁硬编码在核心库中。
+*   **配置**: 硬件参数（如 COM 端口）应通过环境变量 `NFCTESTER_PORT` 或配置文件读取，严禁硬编码在核心库中。
 *   **代码规范**: 
     *   方法和类必须有 Docstring。
     *   注释应简洁明了。

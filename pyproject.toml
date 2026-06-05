@@ -1,6 +1,6 @@
 [project]
-name = "CarrotRFIDTester"
-version = "0.0.34"
+name = "nfctester"
+version = "0.0.35"
 description = "A RFID/NFC automation testing framework for cards and readers."
 readme = "README.md"
 requires-python = ">=3.14"
@@ -14,9 +14,9 @@ dependencies = [
 where = ["src"]
 
 [project.scripts]
-crft = "crft.main:main"
-pn532-scanner = "crft.tools.pn532_scanner:run_scanner"
-aes128-cli = "crft.tools.aes128_cli:main"
+nfctester = "nfctester.main:main"
+pn532-scanner = "nfctester.tools.pn532_scanner:run_scanner"
+aes128-cli = "nfctester.tools.aes128_cli:main"
 
 
 
@@ -30,20 +30,24 @@ package = true
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
+    "pytest-dependency>=0.6.0"
 ]
 
 
 [tool.bumpversion]
-current_version = "0.0.34"
+current_version = "0.0.35"
+commit = true
+tag = true
 allow_dirty = true
+tag_name = "v{new_version}"
+message = "chore(release): bump version {current_version} → {new_version}"
 parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
 serialize = ["{major}.{minor}.{patch}"]
-search = 'version = "{current_version}"'
-replace = 'version = "{new_version}"'
 
 [[tool.bumpversion.files]]
 filename = "pyproject.toml"
 
-# 驱动文件版本号
-# [[tool.bumpversion.files]]
-# filename = "src/driver.py"
+[[tool.bumpversion.files]]
+filename = "README.md"
+search = "version-{current_version}-green.svg"
+replace = "version-{new_version}-green.svg"

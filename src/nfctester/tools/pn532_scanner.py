@@ -1,8 +1,8 @@
 import time
 import sys
-from crft.trace import trace
-from crft.hardware import SerialTransport
-from crft.drivers import PN532_HSU
+from nfctester.trace import trace
+from nfctester.hardware import SerialTransport
+from nfctester.drivers import PN532_HSU
 
 def run_scanner():
     """

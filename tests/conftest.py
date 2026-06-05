@@ -1,8 +1,8 @@
 import pytest
-from crft.trace import trace
+from nfctester.trace import trace
 
 def pytest_addoption(parser):
-    group = parser.getgroup("crft-trace", "CRFT Trace Logging Options")
+    group = parser.getgroup("nfctester-trace", "CRFT Trace Logging Options")
     group.addoption("--trace-driver", action="store_true", help="Enable driver layer tracing")
     group.addoption("--trace-protocol", action="store_true", help="Enable protocol layer tracing")
     group.addoption("--trace-level", action="store", default=None, help="Set minimum logging level (DEBUG, INFO, etc.)")
@@ -23,8 +23,8 @@ def pytest_configure(config):
     if trace_level:
         trace.set_level(trace_level)
 
-from crft.hardware import SerialTransport
-from crft.drivers import PN532_HSU
+from nfctester.hardware import SerialTransport
+from nfctester.drivers import PN532_HSU
 
 @pytest.fixture(scope="session")
 def card_reader():

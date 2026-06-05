@@ -7,7 +7,7 @@
 
 import serial
 import time
-from crft.trace import trace
+from nfctester.trace import trace
 import sys
 
 # 配置 loguru 输出格式 (已移至 trace 管理)

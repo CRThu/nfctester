@@ -1,5 +1,5 @@
 import serial
-from crft.trace import trace
+from nfctester.trace import trace
 from .base import Transport
 
 class SerialTransport(Transport):

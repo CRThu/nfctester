@@ -1,5 +1,5 @@
 import pytest
-from crft.utils import crc_a
+from nfctester.utils import crc_a
 
 def test_crc_a_data_vector():
     """

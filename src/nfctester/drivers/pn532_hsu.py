@@ -1,6 +1,6 @@
 import time
 from .card_reader import CardReader
-from crft.trace import trace
+from nfctester.trace import trace
 
 class PN532_HSU(CardReader):
     """PN532 HSU 协议驱动实现"""

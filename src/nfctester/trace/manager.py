@@ -2,7 +2,7 @@ import os
 import sys
 from loguru import logger
 from .handler import TraceHandler
-from crft.parsers import PN532HSUParser, MifareClassicParser, T2TParser
+from nfctester.parsers import PN532HSUParser, MifareClassicParser, T2TParser
 
 
 def trace_format(record):

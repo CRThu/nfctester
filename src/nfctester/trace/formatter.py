@@ -1,4 +1,4 @@
-from crft.parsers import ParsedFrame, ParsedField
+from nfctester.parsers import ParsedFrame, ParsedField
 
 # 分隔线长度
 _SEP_LEN = 55

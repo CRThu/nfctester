@@ -1,8 +1,8 @@
 import secrets
 from .type2tag import Type2Tag
-from crft.crypto import AES128Crypto
-from crft.utils import BitOps
-from crft.trace import trace
+from nfctester.crypto import AES128Crypto
+from nfctester.utils import BitOps
+from nfctester.trace import trace
 
 
 class NTAG224(Type2Tag):

@@ -1,5 +1,5 @@
 import pytest
-from crft.cards import Type2Tag
+from nfctester.cards import Type2Tag
 
 @pytest.fixture
 def t2t_card(card_reader):

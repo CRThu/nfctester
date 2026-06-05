@@ -1,6 +1,6 @@
 import pytest
-from crft.cards import NTAG21x
-from crft.trace import trace
+from nfctester.cards import NTAG21x
+from nfctester.trace import trace
 
 @pytest.fixture
 def ntag(card_reader):
