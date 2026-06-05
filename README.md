@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/Python-3.14+-blue.svg)](https://www.python.org/downloads/)
-[![Version](https://img.shields.io/badge/version-0.0.36-green.svg)](pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.0.37-green.svg)](pyproject.toml)
 
 `nfctester` 是一个专为 RFID/NFC 卡片与 PN532 读卡器设计的自动化测试框架。项目采用严谨的分层架构设计，实现了硬件通信、芯片驱动、卡片逻辑与加密算法的深度解耦，旨在为 RFID 技术研究、漏洞分析及产品测试提供一个健壮且易于扩展的基础平台。
 
