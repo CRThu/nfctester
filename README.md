@@ -14,7 +14,7 @@
   - **芯片**: 深度优化 PN532 HSU (High Speed UART) 驱动，支持位帧 (Bit-framing) 收发。
 - **强大加密支持**: 内置 AES-128 (CBC)、Mifare Crypto1 算法引擎，支持 NTAG22x AES 互认证。
 - **可视化跟踪**: 独特的跟踪控制层与协议解析层，提供树状结构化的通信日志输出，完美还原协议交互细节。
-- **现代化工具链**: 基于 `uv` 进行包管理，集成 `pytest` 自动化测试与 `bump-my-version` 版本控制。
+- **插件化扩展**: 通过 Registry 模式，外部只需 `.py` 文件 + 装饰器即可接入自定义读卡器，无需打包。
 
 ## 🏗️ 架构体系 (8-Layer Architecture)
 
@@ -22,12 +22,13 @@
 
 1.  **硬件传输层 (Hardware)**: 负责底层字节流传输（如 `SerialTransport`）。
 2.  **驱动层 (Driver)**: 实现特定芯片（如 PN532）的协议封装与寄存器操作。
-3.  **卡片逻辑层 (Card)**: 定义各种 RFID 标签与智能卡的协议行为（Mifare, NTAG 等）。
-4.  **加密算法层 (Crypto)**: 提供原子级的加密/解密操作（AES, Crypto1）。
-5.  **通用工具层 (Utility)**: 包含 CRC 校验、位操作等基础辅助函数。
-6.  **跟踪控制层 (Trace)**: 中心化的日志管理系统，实现业务逻辑与通信监控的分离。
-7.  **协议解析层 (Parsers)**: 将字节流解析为结构化字段树，供格式化输出使用。
-8.  **脚本/CLI 层 (CLI)**: 提供开箱即用的命令行工具。
+3.  **注册表与会话 (Registry)**: 类注册、会话管理，贯穿硬件层与驱动层。
+4.  **卡片逻辑层 (Card)**: 定义各种 RFID 标签与智能卡的协议行为（Mifare, NTAG 等）。
+5.  **加密算法层 (Crypto)**: 提供原子级的加密/解密操作（AES, Crypto1）。
+6.  **通用工具层 (Utility)**: 包含 CRC 校验、位操作等基础辅助函数。
+7.  **跟踪控制层 (Trace)**: 中心化的日志管理系统，实现业务逻辑与通信监控的分离。
+8.  **协议解析层 (Parsers)**: 将字节流解析为结构化字段树，供格式化输出使用。
+9.  **脚本/CLI 层 (CLI)**: 提供开箱即用的命令行工具。
 
 ## 🚀 快速上手
 
@@ -44,7 +45,154 @@ cd nfctester
 uv sync
 ```
 
-### 运行工具
+### 基本用法：Registry 创建读卡器
+
+```python
+from nfctester.registry import CardReaderRegistry
+
+# 一行创建（自动创建 transport 并注入）
+reader = CardReaderRegistry.create("pn532", transport="serial", port="COM20")
+reader.connect()
+
+tag = reader.find()
+if tag:
+    print(f"UID: {tag['uid'].hex(' ').upper()}")
+
+reader.disconnect()
+```
+
+### Session：上下文管理器（自动 connect/disconnect）
+
+```python
+from nfctester.registry import session
+
+# 自动管理 reader 的生命周期，类似 C# 的 using
+with session("pn532", transport="serial", port="COM20") as s:
+    tag = s.find()
+    if tag:
+        s.set_crc(False, False)
+        s.transceive(b"\x26", last_tx_bits=7)
+# 退出时自动 disconnect
+```
+
+## 🔌 自定义读卡器
+
+框架通过 Registry 模式支持外部读卡器扩展。只需继承 `CardReader` 基类并用装饰器注册即可。
+
+### 1. 自定义 Transport（可选）
+
+如果你的硬件不是串口，先注册一个 Transport：
+
+```python
+from nfctester.registry import TransportRegistry
+from nfctester.hardware.base import Transport
+
+@TransportRegistry.register("tcp")
+class TCPTransport(Transport):
+    def __init__(self, host="127.0.0.1", port=5000):
+        import socket
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.connect((host, port))
+
+    def write(self, data: bytes):
+        self.sock.sendall(data)
+
+    def read(self, size: int) -> bytes:
+        return self.sock.recv(size)
+
+    def flush_input(self):
+        self.sock.setblocking(False)
+        try:
+            while self.sock.recv(4096):
+                pass
+        except BlockingIOError:
+            pass
+        finally:
+            self.sock.setblocking(True)
+
+    def close(self):
+        self.sock.close()
+```
+
+### 2. 自定义 CardReader
+
+```python
+from nfctester.registry import CardReaderRegistry
+from nfctester.drivers import CardReader
+
+@CardReaderRegistry.register("acr122u")
+class ACR122UReader(CardReader):
+    def __init__(self, transport):
+        self.transport = transport
+
+    def connect(self):
+        self.transport.write(b"\xFF\x00\x00\x00\x00")
+        self.transport.flush_input()
+
+    def get_version(self) -> bytes:
+        self.transport.write(b"\xFF\x00\x48\x00\x00")
+        return self.transport.read(10)
+
+    def set_crc(self, tx_enabled: bool, rx_enabled: bool):
+        pass
+
+    def set_rf_field(self, enabled: bool):
+        pass
+
+    def get_rf_field(self) -> bool:
+        return True
+
+    def find(self) -> dict:
+        cmd = b"\xD4\x4A\x01\x00"
+        frame = bytes([0xFF, 0x00, 0x00, 0x00, len(cmd)]) + cmd
+        self.transport.write(frame)
+        res = self.transport.read(20)
+        if res and len(res) >= 10:
+            return {"uid": res[6:10], "atq": res[2:4], "sak": res[4]}
+        return None
+
+    def select(self) -> dict:
+        return self.find()
+
+    def deselect(self) -> bool:
+        return True
+
+    def exchange(self, data: bytes) -> bytes:
+        frame = bytes([0xFF, 0x00, 0x00, 0x00, len(data)]) + data
+        self.transport.write(frame)
+        return self.transport.read(262)
+
+    def transceive(self, data: bytes, last_tx_bits: int = 0) -> bytes:
+        return self.exchange(data)
+
+    def disconnect(self):
+        self.transport.close()
+```
+
+### 3. 使用你的自定义读卡器
+
+```python
+import my_reader  # import 即自动注册
+from nfctester.registry import CardReaderRegistry
+
+reader = CardReaderRegistry.create("acr122u", transport="serial", port="COM3")
+reader.connect()
+tag = reader.find()
+reader.disconnect()
+```
+
+### 4. 查看已注册的读卡器
+
+```python
+from nfctester.registry import TransportRegistry, CardReaderRegistry
+
+print("Transports:", TransportRegistry.list())  # ['serial', 'tcp']
+print("Readers:", CardReaderRegistry.list())    # ['pn532', 'acr122u']
+```
+
+更多示例见 [examples/](examples/) 目录。
+
+## 🛠️ 运行工具
 
 框架内置了多个实用的 CLI 工具：
 
@@ -57,7 +205,7 @@ uv sync
   uv run aes128-cli -m encrypt -i <hex_data> -k <hex_key>
   ```
 
-### 运行测试
+## 🧪 运行测试
 
 ```bash
 # 运行所有测试

@@ -8,13 +8,13 @@
 ### 第一层：硬件传输层 (Hardware/Transport Layer)
 *   **目录**: `src/nfctester/hardware/`
 *   **职责**: 负责底层的字节流传输。
-*   **核心类**: `SerialTransport` (处理 RS232/HSU 串口通信)。
-*   **设计原则**: 定义统一的 `BaseTransport` 接口，以便后续扩展 TCP/IP 或 USB 传输。
+*   **核心类**: `Transport`（抽象基类）, `SerialTransport`（已注册为 `"serial"`）。
+*   **设计原则**: 定义统一的 `Transport` 接口，通过 `@TransportRegistry.register()` 注册，支持扩展 TCP/IP 或 USB 传输。
 
 ### 第二层：驱动层 (Driver Layer)
 *   **目录**: `src/nfctester/drivers/`
 *   **职责**: 实现特定芯片的协议封装（如 PN532 的 NXP 标准帧格式）。
-*   **核心类**: `PN532_HSU`。
+*   **核心类**: `PN532_HSU`（已注册为 `"pn532"`）。
 *   **逻辑**: 包含 ACK 处理、唤醒序列（Wakeup）、以及读取/写入数据帧。
 *   **模式**: 采用"请求-响应模式 (Request-Response Pattern)"，通过私有方法 `_req` 统一调度 `发送 -> 读取 -> 基础校验` 周期，确保指令执行的原子性与健壮性。
 *   **寄存器辅助方法**:
@@ -24,6 +24,16 @@
 *   **位帧收发支持**:
     *   `transceive(data, last_tx_bits=8)`: 在标准整字节发送基础上支持位帧发送。`last_tx_bits` 非 8 时，发送前写 `CIU_BitFraming`（`0x633D`）的 `TxLastBits[2:0]`，发送完成后清零复原，保证不影响后续整字节通信。
     *   `self.last_rx_bits`: 实例属性，每次 `transceive` 完成后自动更新为 `CIU_Control`（`0x633C`）的 `RxLastBits[2:0]`，供上层协议判断最后接收字节的有效位数（0 = 全字节有效）。
+
+### 注册表与会话系统 (Registry & Session)
+*   **目录**: `src/nfctester/registry.py`
+*   **职责**: 提供类注册与会话管理两大能力，贯穿硬件层与驱动层。
+*   **核心组件**:
+    *   `TransportRegistry`: 传输层类注册表。使用 `@TransportRegistry.register("name")` 装饰器注册 Transport 实现，`TransportRegistry.create("name", **kwargs)` 实例化。
+    *   `CardReaderRegistry`: 读卡器类注册表。使用 `@CardReaderRegistry.register("name")` 装饰器注册 CardReader 实现。`CardReaderRegistry.create("name", transport="serial", **kwargs)` 可一行创建 reader（自动创建 transport 并注入）。
+    *   `Session` / `session()`: 上下文管理器，封装 reader 的 connect/disconnect 生命周期，类似 C# 的 `using`。通过 `__getattr__` 委托所有 reader 方法调用，无需显式透传。
+*   **入口点发现**: `load_entry_points()` 在包初始化时扫描 `nfctester.transports` / `nfctester.readers` entry-points，自动注册外部包的实现。
+*   **外部扩展**: 外部脚本只需继承 `CardReader` 基类并用 `@CardReaderRegistry.register("name")` 装饰，import 即注册，无需打包。
 
 ### 第三层：卡片逻辑层 (Card Layer)
 *   **目录**: `src/nfctester/cards/`

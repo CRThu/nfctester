@@ -1,7 +1,9 @@
 import time
 from .card_reader import CardReader
 from nfctester.trace import trace
+from nfctester.registry import CardReaderRegistry
 
+@CardReaderRegistry.register("pn532")
 class PN532_HSU(CardReader):
     """PN532 HSU 协议驱动实现"""
     # PN532 错误码对照表

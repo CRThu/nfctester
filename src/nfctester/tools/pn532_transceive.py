@@ -1,7 +1,6 @@
 import time
 from nfctester.trace import trace
-from nfctester.hardware import SerialTransport
-from nfctester.drivers import PN532_HSU
+from nfctester.registry import CardReaderRegistry
 
 def run_atqa_poll_test():
     """
@@ -15,11 +14,8 @@ def run_atqa_poll_test():
     # ----------------
 
     try:
-        # 1. 初始化传输层
-        transport = SerialTransport()
-        
-        # 2. 初始化驱动层
-        reader = PN532_HSU(transport)
+        # 通过 Registry 创建读卡器
+        reader = CardReaderRegistry.create("pn532", transport="serial")
         
         # 3. 建立连接
         reader.connect()

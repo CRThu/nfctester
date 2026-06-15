@@ -1,8 +1,7 @@
 import time
 import sys
 from nfctester.trace import trace
-from nfctester.hardware import SerialTransport
-from nfctester.drivers import PN532_HSU
+from nfctester.registry import CardReaderRegistry
 
 def run_scanner():
     """
@@ -12,11 +11,8 @@ def run_scanner():
     # 配置日志格式 (由 trace 统一管理，不再直接操作 logger)
 
     try:
-        # 1. 初始化传输层 (自动识别环境配置中的串口)
-        transport = SerialTransport()
-        
-        # 2. 初始化驱动层
-        reader = PN532_HSU(transport)
+        # 通过 Registry 创建读卡器
+        reader = CardReaderRegistry.create("pn532", transport="serial")
         
         # 3. 建立连接
         reader.connect()

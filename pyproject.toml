@@ -18,6 +18,12 @@ nfctester = "nfctester.main:main"
 pn532-scanner = "nfctester.tools.pn532_scanner:run_scanner"
 aes128-cli = "nfctester.tools.aes128_cli:main"
 
+[project.entry-points."nfctester.transports"]
+serial = "nfctester.hardware.serial_transport:SerialTransport"
+
+[project.entry-points."nfctester.readers"]
+pn532 = "nfctester.drivers.pn532_hsu:PN532_HSU"
+
 
 
 [tool.pytest.ini_options]

@@ -1,7 +1,9 @@
 import serial
 from nfctester.trace import trace
+from nfctester.registry import TransportRegistry
 from .base import Transport
 
+@TransportRegistry.register("serial")
 class SerialTransport(Transport):
     """基于串口的传输实现"""
     def __init__(self, port="COM20", baudrate=115200):
