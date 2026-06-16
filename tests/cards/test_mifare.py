@@ -6,7 +6,7 @@ def card(card_reader):
     """获取 MifareClassicCard 实例的 fixture"""
     tag = card_reader.find()
     assert tag is not None, "未找到卡片"
-    return MifareClassicCard(card_reader, tag["uid"])
+    return MifareClassicCard(card_reader)
 
 def create_value_block(value: int, addr: int) -> bytes:
     """创建 Mifare Classic 数值块格式"""

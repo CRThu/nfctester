@@ -16,8 +16,8 @@ class NTAG224(Type2Tag):
     CMD_PWD_AUTH_B = 0xAF
     CMD_PWD_AUTH_B_RES = 0x00
 
-    def __init__(self, reader, uid: bytes):
-        super().__init__(reader, uid)
+    def __init__(self, reader):
+        super().__init__(reader)
 
     def get_version(self) -> bytes:
         """

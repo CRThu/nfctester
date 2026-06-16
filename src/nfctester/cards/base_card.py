@@ -6,9 +6,9 @@ class BaseCard(ABC):
     加密卡基类 (如 Mifare Classic)
     """
 
-    def __init__(self, reader, uid: bytes):
+    def __init__(self, reader):
         self.reader = reader
-        self.uid = uid
+        self.uid = None
 
     @abstractmethod
     def authenticate(self, block_addr: int, key: bytes, key_type: int) -> bool:

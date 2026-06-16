@@ -3,7 +3,7 @@
 ## 1. 项目概述
 `nfctester` 是一个用于测试 RFID 卡片和 PN532 读卡器的自动化测试框架。项目采用分层架构，旨在实现硬件通信、芯片驱动、卡片逻辑与加密算法的解耦。
 
-## 2. 八层架构体系
+## 2. 九层架构体系
 
 ### 第一层：硬件传输层 (Hardware/Transport Layer)
 *   **目录**: `src/nfctester/hardware/`
@@ -42,12 +42,12 @@
 *   **逻辑**: 
     *   **BaseTag**: 针对简单标签的基类，定义了通用的 `read_page` 和 `write_page` 接口。
     *   **BaseCard**: 针对加密智能卡的基类，包含 `authenticate` 和钱包操作等复杂功能。
-    *   `MifareClassicCard`: 继承自 `BaseCard`，实现完整的 Mifare Classic 指令集。
+    *   `MifareClassicCard`: 继承自 `BaseCard`，实现完整的 Mifare Classic 指令集。`authenticate()` 内部自动调用 `find()` 获取 UID（Mifare 认证协议要求）。
     *   `Type2Tag`: 继承自 `BaseTag`，实现 NFC Forum Type 2 Tag 标准指令集（如 NTAG 读写）。整合了 NDEF 解析能力 (`get_ndef`)。
     *   `NTAG21x`: 继承自 `Type2Tag`，针对 NXP NTAG21x 系列扩展了版本读取 (`get_version`) 和密码认证 (`auth`) 功能。
     *   `NTAG22x`: 继承自 `Type2Tag`，针对 NXP NTAG22x DNA 系列扩展了基于 AES-128 的双向互认证 (`auth`)。
-    *   **认证逻辑**: `authenticate` 方法使用 PN532 内置的硬件认证功能。
-    *   **协议安全**: 目前依赖硬件层处理 Mifare Classic 的三轮认证，加密算法层主要提供离线的算法验证支持。
+    *   **认证逻辑**: Mifare Classic 的 `authenticate` 使用 PN532 硬件认证，需要 UID（由 `find()` 自动获取）。其他卡片类型的认证由各自的 `auth()` 方法处理。
+    *   **构造约定**: 所有卡片类构造函数仅接收 `reader` 参数，不接收 `uid`。UID 通过 `find()` 或首次认证时自动获取。
 
 ### 第四层：加密算法层 (Crypto Layer)
 *   **目录**: `src/nfctester/crypto/`
@@ -115,7 +115,16 @@
     *   注释应简洁明了。
     *   异常处理必须覆盖超时和通信错误。
 
-## 4. 依赖项
+## 4. 外部项目集成指南
+
+外部项目（如 `CarrotFMTester`）依赖 `nfctester` 时，应遵循以下规范：
+
+*   **禁止直接 import 内部模块**: 不得 `from nfctester.hardware.serial_transport import SerialTransport` 或 `from nfctester.drivers.pn532_hsu import PN532_HSU`。这会耦合到具体实现，违反插件化设计。
+*   **统一使用 Registry 创建读卡器**: `CardReaderRegistry.create("pn532", transport="serial", port="COM20")` 一行完成 transport + reader 的创建与注入。
+*   **使用 Session 管理生命周期**: `with session("pn532", transport="serial", port="COM20") as s:` 自动处理 connect/disconnect，避免遗漏断开连接。
+*   **卡片类接收 reader 实例**: 自定义卡片类（如 `SM7Card`）的构造函数应接受 `reader` 参数，不关心 reader 的创建方式。
+
+## 5. 依赖项
 *   `pyserial`: 串口通信。
 *   `loguru`: 结构化日志记录。
 *   `pytest`: 测试框架。

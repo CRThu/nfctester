@@ -33,7 +33,7 @@ def test_ntag224_auth_mock():
     mock_reader.transceive.side_effect = [res1, res2]
     
     # 2. 创建卡片对象
-    tag = NTAG224(mock_reader, uid=bytes.fromhex("04A1B2C3D4E5F6"))
+    tag = NTAG224(mock_reader)
     
     # 3. 固定 RndA 模拟随机数生成
     with patch("secrets.token_bytes") as mock_token:
@@ -57,7 +57,7 @@ def card(card_reader):
     """获取 NTAG224Card 实例的 fixture"""
     tag = card_reader.find()
     assert tag is not None, "未发现卡片，请确认已放置在读卡器上"
-    return NTAG224(card_reader, tag["uid"])
+    return NTAG224(card_reader)
 
 @pytest.mark.ntag224
 @pytest.mark.dependency(name="ntag224_write_key")

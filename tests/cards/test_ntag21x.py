@@ -7,7 +7,7 @@ def ntag(card_reader):
     """获取 NTAG21x 实例的 fixture"""
     tag = card_reader.find()
     assert tag is not None, "未找到卡片，请确保 NTAG21x 标签已放置在读卡器上"
-    return NTAG21x(card_reader, tag["uid"])
+    return NTAG21x(card_reader)
 
 def test_ntag_get_version(ntag):
     """

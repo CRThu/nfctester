@@ -12,8 +12,16 @@ class MifareClassicCard(BaseCard):
     CMD_RESTORE = 0xC2
     CMD_TRANSFER = 0xB0
 
-    def __init__(self, reader, uid: bytes):
-        super().__init__(reader, uid)
+    def __init__(self, reader):
+        super().__init__(reader)
+
+    def _ensure_uid(self):
+        if self.uid is not None:
+            return
+        tag = self.reader.find()
+        if not tag:
+            raise RuntimeError("未发现卡片，请确认已放置在读卡器上")
+        self.uid = tag['uid']
 
     def authenticate(self, block_addr: int, key: bytes, key_type: int = 0x60) -> bool:
         """
@@ -25,6 +33,9 @@ class MifareClassicCard(BaseCard):
         if len(key) != 6:
             raise ValueError("Key must be 6 bytes")
         
+        # Mifare 认证需要 UID，未寻卡时自动寻卡
+        self._ensure_uid()
+
         # 使用读卡器提供的 exchange (InDataExchange 自动封装)
         res = self.reader.exchange(bytes([key_type, block_addr]) + key + self.uid)
         return res is not None

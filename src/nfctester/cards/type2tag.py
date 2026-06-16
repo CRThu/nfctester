@@ -9,8 +9,8 @@ class Type2Tag(BaseTag):
     CMD_READ = 0x30
     CMD_WRITE = 0xA2
 
-    def __init__(self, reader, uid: bytes):
-        super().__init__(reader, uid)
+    def __init__(self, reader):
+        super().__init__(reader)
 
     def read_page(self, page_addr: int) -> bytes:
         """

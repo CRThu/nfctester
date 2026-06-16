@@ -6,9 +6,8 @@ class BaseTag(ABC):
     RFID 标签基类
     """
 
-    def __init__(self, reader, uid: bytes):
+    def __init__(self, reader):
         self.reader = reader
-        self.uid = uid
 
     def transceive(self, data: bytes) -> bytes:
         """透传数据到读卡器"""
