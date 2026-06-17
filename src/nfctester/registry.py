@@ -74,6 +74,39 @@ class CardReaderRegistry:
         return list(cls._readers.keys())
 
 
+class CardRegistry:
+    """卡片注册表，管理 Card 类的注册与实例化。"""
+
+    _cards: dict[str, type] = {}
+
+    @classmethod
+    def register(cls, name: str):
+        def decorator(klass: type) -> type:
+            cls._cards[name] = klass
+            return klass
+        return decorator
+
+    @classmethod
+    def create(cls, name: str, reader, **kwargs):
+        if name not in cls._cards:
+            raise ValueError(
+                f"Unknown card: {name}. Available: {list(cls._cards)}"
+            )
+        return cls._cards[name](reader, **kwargs)
+
+    @classmethod
+    def get(cls, name: str) -> type:
+        if name not in cls._cards:
+            raise ValueError(
+                f"Unknown card: {name}. Available: {list(cls._cards)}"
+            )
+        return cls._cards[name]
+
+    @classmethod
+    def list(cls) -> list[str]:
+        return list(cls._cards.keys())
+
+
 class Session:
     """会话上下文管理器，封装 reader 的生命周期操作。
 
@@ -156,5 +189,11 @@ def load_entry_points():
             if ep.name not in CardReaderRegistry._readers:
                 klass = ep.load()
                 CardReaderRegistry._readers[ep.name] = klass
+
+        card_eps = eps.select(group="nfctester.cards") if hasattr(eps, 'select') else eps.get("nfctester.cards", [])
+        for ep in card_eps:
+            if ep.name not in CardRegistry._cards:
+                klass = ep.load()
+                CardRegistry._cards[ep.name] = klass
     except Exception:
         pass

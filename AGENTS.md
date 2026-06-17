@@ -31,6 +31,7 @@
 *   **核心组件**:
     *   `TransportRegistry`: 传输层类注册表。使用 `@TransportRegistry.register("name")` 装饰器注册 Transport 实现，`TransportRegistry.create("name", **kwargs)` 实例化。
     *   `CardReaderRegistry`: 读卡器类注册表。使用 `@CardReaderRegistry.register("name")` 装饰器注册 CardReader 实现。`CardReaderRegistry.create("name", transport="serial", **kwargs)` 可一行创建 reader（自动创建 transport 并注入）。
+    *   `CardRegistry`: 卡片类注册表。使用 `@CardRegistry.register("name")` 装饰器注册 Card 实现。`CardRegistry.create("name", reader, **kwargs)` 可动态创建卡片实例。
     *   `Session` / `session()`: 上下文管理器，封装 reader 的 connect/disconnect 生命周期，类似 C# 的 `using`。通过 `__getattr__` 委托所有 reader 方法调用，无需显式透传。
 *   **入口点发现**: `load_entry_points()` 在包初始化时扫描 `nfctester.transports` / `nfctester.readers` entry-points，自动注册外部包的实现。
 *   **外部扩展**: 外部脚本只需继承 `CardReader` 基类并用 `@CardReaderRegistry.register("name")` 装饰，import 即注册，无需打包。

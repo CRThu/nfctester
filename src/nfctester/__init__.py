@@ -2,12 +2,14 @@ from .trace.manager import trace
 from .registry import (
     TransportRegistry,
     CardReaderRegistry,
+    CardRegistry,
     Session,
     session,
     load_entry_points,
 )
 from .hardware.serial_transport import SerialTransport
 from .drivers.pn532_hsu import PN532_HSU
+from .cards import MifareClassicCard, NTAG21x, NTAG224, Type2Tag
 
 load_entry_points()
 
@@ -15,8 +17,13 @@ __all__ = [
     "trace",
     "TransportRegistry",
     "CardReaderRegistry",
+    "CardRegistry",
     "Session",
     "session",
     "SerialTransport",
     "PN532_HSU",
+    "MifareClassicCard",
+    "NTAG21x",
+    "NTAG224",
+    "Type2Tag",
 ]

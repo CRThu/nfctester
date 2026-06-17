@@ -1,6 +1,8 @@
+from ..registry import CardRegistry
 from .type2tag import Type2Tag
 
 
+@CardRegistry.register("ntag21x")
 class NTAG21x(Type2Tag):
     """
     NXP NTAG21x 系列专用驱动 (如 NTAG213, NTAG215, NTAG216)

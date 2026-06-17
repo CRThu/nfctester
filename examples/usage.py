@@ -34,3 +34,19 @@ print(f"\nCreated: {type(reader).__name__}")
 # 方式 B: 传入已有 reader
 # with session(reader=reader) as s:
 #     tag = s.find()
+
+# ============================================================
+# 3. CardRegistry: 卡片注册与动态实例化
+# ============================================================
+from nfctester.registry import CardRegistry
+
+print("\n=== Cards ===")
+for name in CardRegistry.list():
+    print(f"  - {name}")
+
+# 示例：动态创建卡片实例
+# tag = reader.find()
+# if tag:
+#     card = CardRegistry.create("mifare_classic", reader=reader)
+#     print(f"Card instance: {type(card).__name__}")
+#     card.authenticate(0, b"\xFF"*6)

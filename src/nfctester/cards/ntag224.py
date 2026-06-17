@@ -1,10 +1,12 @@
 import secrets
+from ..registry import CardRegistry
 from .type2tag import Type2Tag
 from nfctester.crypto import AES128Crypto
 from nfctester.utils import BitOps
 from nfctester.trace import trace
 
 
+@CardRegistry.register("ntag224")
 class NTAG224(Type2Tag):
     """
     NXP NTAG224 DNA 系列专用驱动

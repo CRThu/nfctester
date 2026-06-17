@@ -45,18 +45,21 @@ cd nfctester
 uv sync
 ```
 
-### 基本用法：Registry 创建读卡器
+### 基本用法：Registry 创建读卡器与卡片
 
 ```python
-from nfctester.registry import CardReaderRegistry
+from nfctester.registry import CardReaderRegistry, CardRegistry
 
-# 一行创建（自动创建 transport 并注入）
+# 1. 一行创建读卡器（自动创建 transport 并注入）
 reader = CardReaderRegistry.create("pn532", transport="serial", port="COM20")
 reader.connect()
 
+# 2. 通过 CardRegistry 动态创建卡片实例
 tag = reader.find()
 if tag:
-    print(f"UID: {tag['uid'].hex(' ').upper()}")
+    # 假设已知卡片类型为 mifare_classic
+    card = CardRegistry.create("mifare_classic", reader=reader)
+    print(f"UID: {card.uid.hex(' ').upper()}")
 
 reader.disconnect()
 ```
@@ -181,13 +184,28 @@ tag = reader.find()
 reader.disconnect()
 ```
 
-### 4. 查看已注册的读卡器
+### 4. 自定义卡片注册 (CardRegistry)
+
+查看 `examples/custom_card.py` 以获取如何实现自定义卡片类的示例：
 
 ```python
-from nfctester.registry import TransportRegistry, CardReaderRegistry
+from nfctester.registry import CardRegistry
+from nfctester.cards.base_card import BaseCard
 
-print("Transports:", TransportRegistry.list())  # ['serial', 'tcp']
-print("Readers:", CardReaderRegistry.list())    # ['pn532', 'acr122u']
+@CardRegistry.register("my_custom_card")
+class MyCustomCard(BaseCard):
+    # 实现 BaseCard 定义的抽象方法
+    ...
+```
+
+### 5. 查看已注册的组件
+
+```python
+from nfctester.registry import TransportRegistry, CardReaderRegistry, CardRegistry
+
+print("Transports:", TransportRegistry.list())
+print("Readers:", CardReaderRegistry.list())
+print("Cards:", CardRegistry.list())
 ```
 
 更多示例见 [examples/](examples/) 目录。

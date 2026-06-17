@@ -1,6 +1,8 @@
+from ..registry import CardRegistry
 from .base_tag import BaseTag
 
 
+@CardRegistry.register("type2tag")
 class Type2Tag(BaseTag):
     """
     NFC Forum Type 2 Tag 标准指令集实现 (如 NTAG21x 系列)

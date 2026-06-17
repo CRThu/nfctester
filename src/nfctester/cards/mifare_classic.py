@@ -1,6 +1,8 @@
+from ..registry import CardRegistry
 from .base_card import BaseCard
 
 
+@CardRegistry.register("mifare_classic")
 class MifareClassicCard(BaseCard):
     """MIFARE Classic 完整操作实现"""
     
