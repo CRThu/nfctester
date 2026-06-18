@@ -1,3 +1,4 @@
+import os
 import secrets
 from ..registry import CardRegistry
 from .type2tag import Type2Tag
@@ -75,9 +76,11 @@ class NTAG224(Type2Tag):
         trace.debug(f"{'Decrypted RndB':<25}: {rndb.hex(' ').upper()}")
         trace.debug(f"{'Rotated RndB\'':<25}: {rndb_prime.hex(' ').upper()}")
 
-        # 调试用：固定值或伪随机数
-        # rnda = bytes.fromhex("00112233445566778899AABBCCDDEEFF")
-        rnda = secrets.token_bytes(16)
+        rnda_env = os.environ.get("DEBUG_NTAG224_RNDA")
+        if rnda_env:
+            rnda = bytes.fromhex(rnda_env)
+        else:
+            rnda = secrets.token_bytes(16)
         trace.debug(f"{'Generated RndA':<25}: {rnda.hex(' ').upper()}")
 
         # 3. 加密 RndA || RndB' (使用 AES-128 ECB 模拟 CBC)
