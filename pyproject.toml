@@ -13,6 +13,9 @@ dependencies = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+nfctester = ["py.typed"]
+
 [project.scripts]
 nfctester = "nfctester.main:main"
 pn532-scanner = "nfctester.tools.pn532_scanner:run_scanner"

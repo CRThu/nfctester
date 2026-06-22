@@ -1,21 +1,33 @@
 from __future__ import annotations
 from contextlib import contextmanager
+from typing import TypeVar, Union, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .cards.base_card import BaseCard
+    from .cards.base_tag import BaseTag
+    from .drivers.card_reader import CardReader
+    from .hardware.base import Transport
+
+_CardT = TypeVar("_CardT", bound=Union["BaseCard", "BaseTag"])
+_TagT = TypeVar("_TagT", bound="BaseTag")
+_ReaderT = TypeVar("_ReaderT", bound="CardReader")
+_TransportT = TypeVar("_TransportT", bound="Transport")
 
 
 class TransportRegistry:
     """传输层注册表，管理 Transport 类的注册与实例化。"""
 
-    _transports: dict[str, type] = {}
+    _transports: dict[str, type[Transport]] = {}
 
     @classmethod
     def register(cls, name: str):
-        def decorator(klass: type) -> type:
+        def decorator(klass: type[_TransportT]) -> type[_TransportT]:
             cls._transports[name] = klass
             return klass
         return decorator
 
     @classmethod
-    def create(cls, name: str, **kwargs):
+    def create(cls, name: str, **kwargs) -> Transport:
         if name not in cls._transports:
             raise ValueError(
                 f"Unknown transport: {name}. Available: {list(cls._transports)}"
@@ -23,7 +35,7 @@ class TransportRegistry:
         return cls._transports[name](**kwargs)
 
     @classmethod
-    def get(cls, name: str) -> type:
+    def get(cls, name: str) -> type[Transport]:
         if name not in cls._transports:
             raise ValueError(
                 f"Unknown transport: {name}. Available: {list(cls._transports)}"
@@ -38,17 +50,17 @@ class TransportRegistry:
 class CardReaderRegistry:
     """读卡器注册表，管理 CardReader 类的注册与实例化。"""
 
-    _readers: dict[str, type] = {}
+    _readers: dict[str, type[CardReader]] = {}
 
     @classmethod
     def register(cls, name: str):
-        def decorator(klass: type) -> type:
+        def decorator(klass: type[_ReaderT]) -> type[_ReaderT]:
             cls._readers[name] = klass
             return klass
         return decorator
 
     @classmethod
-    def create(cls, name: str, transport: str | None = None, **kwargs):
+    def create(cls, name: str, transport: str | None = None, **kwargs) -> CardReader:
         if name not in cls._readers:
             raise ValueError(
                 f"Unknown reader: {name}. Available: {list(cls._readers)}"
@@ -62,7 +74,7 @@ class CardReaderRegistry:
         return reader_cls(**kwargs)
 
     @classmethod
-    def get(cls, name: str) -> type:
+    def get(cls, name: str) -> type[CardReader]:
         if name not in cls._readers:
             raise ValueError(
                 f"Unknown reader: {name}. Available: {list(cls._readers)}"
@@ -77,17 +89,17 @@ class CardReaderRegistry:
 class CardRegistry:
     """卡片注册表，管理 Card 类的注册与实例化。"""
 
-    _cards: dict[str, type] = {}
+    _cards: dict[str, Union[BaseCard, BaseTag]] = {}
 
     @classmethod
     def register(cls, name: str):
-        def decorator(klass: type) -> type:
+        def decorator(klass: type[_CardT]) -> type[_CardT]:
             cls._cards[name] = klass
             return klass
         return decorator
 
     @classmethod
-    def create(cls, name: str, reader, **kwargs):
+    def create(cls, name: str, reader, **kwargs) -> Union[BaseCard, BaseTag]:
         if name not in cls._cards:
             raise ValueError(
                 f"Unknown card: {name}. Available: {list(cls._cards)}"
@@ -95,7 +107,7 @@ class CardRegistry:
         return cls._cards[name](reader, **kwargs)
 
     @classmethod
-    def get(cls, name: str) -> type:
+    def get(cls, name: str) -> type[Union[BaseCard, BaseTag]]:
         if name not in cls._cards:
             raise ValueError(
                 f"Unknown card: {name}. Available: {list(cls._cards)}"
