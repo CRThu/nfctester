@@ -64,8 +64,12 @@ class NTAG224(Type2Tag):
         cmd = bytes([self.CMD_PWD_AUTH_A, 0x00])
         res = self.transceive(cmd)
 
-        if not res or res[0] != self.CMD_PWD_AUTH_A_RES or len(res) != 17:
-            raise PermissionError(f"Auth Step 1 failed: {res.hex() if res else 'No response'}")
+        if not res:
+            raise PermissionError("Auth Step 1 failed: No response from tag")
+        if res[0] != self.CMD_PWD_AUTH_A_RES:
+            raise PermissionError(f"Auth Step 1 failed: Expected first byte 0x{self.CMD_PWD_AUTH_A_RES:02X}, got 0x{res[0]:02X} (response: {res.hex()})")
+        if len(res) != 17:
+            raise PermissionError(f"Auth Step 1 failed: Expected 17 bytes (1 header + 16 ek(RndB)), got {len(res)} bytes (response: {res.hex()})")
 
         ek_rndb = res[1:]
         trace.debug(f"{'Received ek(RndB)':<25}: {ek_rndb.hex(' ').upper()}")
@@ -98,8 +102,12 @@ class NTAG224(Type2Tag):
         cmd = bytes([self.CMD_PWD_AUTH_B]) + ek1 + ek2
         res = self.transceive(cmd)
 
-        if not res or res[0] != self.CMD_PWD_AUTH_B_RES or len(res) != 17:
-            raise PermissionError(f"Auth Step 2 failed: {res.hex() if res else 'No response'}")
+        if not res:
+            raise PermissionError("Auth Step 2 failed: No response from tag")
+        if res[0] != self.CMD_PWD_AUTH_B_RES:
+            raise PermissionError(f"Auth Step 2 failed: Expected first byte 0x{self.CMD_PWD_AUTH_B_RES:02X}, got 0x{res[0]:02X} (response: {res.hex()})")
+        if len(res) != 17:
+            raise PermissionError(f"Auth Step 2 failed: Expected 17 bytes (1 header + 16 ek(RndA')), got {len(res)} bytes (response: {res.hex()})")
 
         ek_rnda_prime = res[1:]
         trace.debug(f"{'Received ek(RndA\')':<25}: {ek_rnda_prime.hex(' ').upper()}")
