@@ -54,6 +54,16 @@ class PN532HSUParser(BaseParser):
             or (len(data) >= 6 and data[:3] == b'\x00\x00\xFF')
         )
 
+    def summary(self, data: bytes) -> str | None:
+        if data == _ACK:
+            return "PN532 ACK"
+        if data == _NACK:
+            return "PN532 NACK"
+        if len(data) >= 7:
+            tfi, cmd = data[5], data[6]
+            return _CMDS.get(tfi, {}).get(cmd, f"0x{cmd:02X}")
+        return None
+
     def parse(self, data: bytes) -> ParsedFrame:
         if data == _ACK:
             return ParsedFrame(raw=data, label="PN532 ACK",

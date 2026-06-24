@@ -19,16 +19,19 @@ class TraceManager:
 
     def __init__(self):
         # 1. 核心层级注册 (默认关闭)
+        parse_level = self._get_parse_level()
         self._layers: dict[str, TraceHandler] = {
             "DRIVER": TraceHandler(
                 layer_name="DRIVER",
                 logger_func=logger.bind(layer="DRIVER").trace,
                 parsers=[PN532HSUParser()],
+                parse_level=parse_level,
             ),
             "PROTOCOL": TraceHandler(
                 layer_name="PROTOCOL",
                 logger_func=logger.bind(layer="PROTOCOL").trace,
                 parsers=[MifareClassicParser(), T2TParser()],
+                parse_level=parse_level,
             ),
         }
 
@@ -48,6 +51,14 @@ class TraceManager:
     def _get_env_bool(self, key, default):
         val = os.getenv(key, str(default)).lower()
         return val in ("1", "true", "yes", "on")
+
+    def _get_parse_level(self):
+        val = os.getenv("CRFT_TRACE_PARSE", "1").lower()
+        if val in ("0", "false", "no", "off"):
+            return 0
+        if val in ("1", "simple", "summary"):
+            return 1
+        return 2
 
     def _filter(self, record):
         """核心过滤逻辑：Layer 开关优先，普通日志走 Level 过滤"""
@@ -79,6 +90,17 @@ class TraceManager:
         name = layer_name.upper()
         if name in self._layers:
             self._layers[name].enabled = enable
+
+    def set_parse(self, level=2):
+        """设置解析级别: 0=关闭, 1=简单(一行摘要), 2=复杂(树状结构)"""
+        for handler in self._layers.values():
+            handler.parse_level = level
+
+    def set_card_type(self, card_type: str):
+        """设置当前卡片类型，注入到所有协议解析器的 state 中"""
+        for handler in self._layers.values():
+            for parser in handler.parsers:
+                parser.state["card_type"] = card_type
 
     def info(self, msg):    logger.info(msg)
     def error(self, msg):   logger.error(msg)

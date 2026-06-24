@@ -34,6 +34,9 @@ class ParsedFrame:
 class BaseParser(ABC):
     """解析器抽象基类，子类实现具体协议的字段解析"""
 
+    def __init__(self):
+        self.state: dict = {}
+
     @abstractmethod
     def can_parse(self, data: bytes) -> bool:
         """判断该解析器是否能处理此数据"""
@@ -43,3 +46,7 @@ class BaseParser(ABC):
     def parse(self, data: bytes) -> ParsedFrame:
         """解析字节流，返回 ParsedFrame"""
         ...
+
+    def summary(self, data: bytes) -> str | None:
+        """一行摘要，用于简单解析模式。返回 None 则降级为原始 hex"""
+        return None

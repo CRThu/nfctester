@@ -1,8 +1,13 @@
 from nfctester.parsers import ParsedFrame, ParsedField
 
+import os
+
 # 分隔线长度
 _SEP_LEN = 55
 _SEP = "-" * _SEP_LEN
+
+# 简单解析模式下 hex 列的对齐宽度
+_HEX_COL_WIDTH = int(os.getenv("CRFT_TRACE_WIDTH", "48"))
 
 # 顶层字段用 [+] 展开（含子字段），[-] 展开（仅描述）
 _ICON_HAS_CHILDREN = "[+]"
@@ -90,3 +95,10 @@ class TraceFormatter:
         """无法解析时的降级输出（仅显示原始 hex）"""
         arrow = "->" if direction == "TX" else "<-"
         return f"{direction} {arrow}  {raw.hex(' ').upper()}"
+
+    @staticmethod
+    def format_summary(direction: str, raw: bytes, summary: str) -> str:
+        """简单解析模式：原始 hex + 一行摘要，括号对齐"""
+        arrow = "->" if direction == "TX" else "<-"
+        hex_str = raw.hex(' ').upper()
+        return f"{direction} {arrow}  {hex_str:<{_HEX_COL_WIDTH}} [{summary}]"

@@ -13,6 +13,8 @@ class NTAG224(Type2Tag):
     NXP NTAG224 DNA 系列专用驱动
     """
 
+    KEY_ADDR = 0x40
+
     CMD_GET_VERSION = 0x60
     CMD_PWD_AUTH_A = 0x1A
     CMD_PWD_AUTH_A_RES = 0xAF
@@ -32,7 +34,7 @@ class NTAG224(Type2Tag):
     def write_key(self, key: bytes):
         """
         写入 16 字节 AES 密钥。
-        根据 NTAG224 规范，密钥需以反向字节序写入 Page 0x40-0x43。
+        根据 NTAG224 规范，密钥需以反向字节序写入 Page KEY_ADDR~KEY_ADDR+4
         """
         if len(key) != 16:
             raise ValueError("AES key must be 16 bytes")
@@ -40,9 +42,13 @@ class NTAG224(Type2Tag):
         # 按照规范，字节序需要反转
         reversed_key = key[::-1]
         for i in range(4):
-            page_addr = 0x40 + i
+            page_addr = self.KEY_ADDR + i
             chunk = reversed_key[i*4 : (i+1)*4]
+            # print(f"write 0x{page_addr:02X} : {chunk.hex()}")
             self.write_page(page_addr, chunk)
+        
+        # rd_chunk = self.read_page(self.KEY_ADDR)
+        # print(f"read {self.KEY_ADDR} : {rd_chunk.hex()}")
 
     def auth(self, password: bytes):
         """
