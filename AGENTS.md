@@ -1,7 +1,7 @@
 # nfctester 架构说明书 (AI 专用)
 
 ## 1. 项目概述
-`nfctester` 是一个用于测试 RFID 卡片和 PN532 读卡器的自动化测试框架。项目采用分层架构，旨在实现硬件通信、芯片驱动、卡片逻辑与加密算法的解耦。
+`nfctester` 是一个用于测试 RFID 卡片和读卡器的自动化测试框架。项目采用分层架构，旨在实现硬件通信、芯片驱动、卡片逻辑与加密算法的解耦。支持 PN532 和 CLRC663 两种读卡器，通过注册表机制实现无缝切换。
 
 ## 2. 九层架构体系
 
@@ -13,17 +13,27 @@
 
 ### 第二层：驱动层 (Driver Layer)
 *   **目录**: `src/nfctester/drivers/`
-*   **职责**: 实现特定芯片的协议封装（如 PN532 的 NXP 标准帧格式）。
-*   **核心类**: `PN532_HSU`（已注册为 `"pn532"`）。
-*   **逻辑**: 包含 ACK 处理、唤醒序列（Wakeup）、以及读取/写入数据帧。
-*   **模式**: 采用"请求-响应模式 (Request-Response Pattern)"，通过私有方法 `_req` 统一调度 `发送 -> 读取 -> 基础校验` 周期，确保指令执行的原子性与健壮性。
-*   **寄存器辅助方法**:
+*   **职责**: 实现特定芯片的协议封装。
+*   **已注册驱动**:
+    *   `PN532_HSU`（注册为 `"pn532"`）: PN532 HSU 协议驱动，通过 NXP 标准帧格式通信。包含 ACK 处理、唤醒序列（Wakeup）、以及读取/写入数据帧。采用"请求-响应模式"，通过私有方法 `_req` 统一调度 `发送 -> 读取 -> 基础校验` 周期。
+    *   `CLRC663`（注册为 `"clrc663"`）: CLRC663 UART 协议驱动，通过串口寄存器读写和 FIFO 命令机制与芯片通信。支持 ISO/IEC 14443A 协议，可无缝替换 PN532 读卡器。
+*   **CLRC663 驱动特点**:
+    *   **UART 协议**: 使用 7 位地址 + R/W 位的寄存器读写协议。写操作发送 2 字节（地址 + 数据），读操作发送 1 字节（地址）并接收 1 字节（数据）。写操作后校验芯片回传的地址字节，不匹配时输出警告。
+    *   **命令执行**: 通过写入 Command 寄存器启动命令，使用 FIFO 缓冲区交换数据，通过 IRQ0 寄存器轮询命令完成状态。
+    *   **寻卡流程**: 手动实现 ISO 14443-A REQA → 抗冲突 → SELECT 序列，通过 TxDataNum 寄存器控制 7 位短帧（REQA）和标准帧（抗冲突/选择）。`select()` 方法先发送 WUPA 唤醒 HALT 状态的卡片，再调用 `find()` 完成完整寻卡。
+    *   **Transceive 机制**: 底层 `_transceive_raw()` 方法遵循 idle → flush FIFO → 写数据 → 清 IRQ → 启动命令的固定序列，确保每次通信状态干净。
+    *   **错误解码**: Error 寄存器位通过 `CLRC663_ERRORS` 字典映射为可读描述，`exchange()` 和 `transceive()` 错误日志包含具体错误类型（如协议错误、碰撞、CRC 错误等）。
+*   **PN532 驱动寄存器辅助方法**:
     *   `_read_reg(address)`: 读取 16 位地址的寄存器值（PN532 指令 0x06）。
     *   `_write_reg(address, value)`: 写入寄存器（PN532 指令 0x08）。
     *   `_modify_reg(address, mask, value)`: 读-改-写，只修改 `mask` 指定的位域，其余位保持不变。`set_crc` 等方法均统一使用此接口。
-*   **位帧收发支持**:
-    *   `transceive(data, last_tx_bits=8)`: 在标准整字节发送基础上支持位帧发送。`last_tx_bits` 非 8 时，发送前写 `CIU_BitFraming`（`0x633D`）的 `TxLastBits[2:0]`，发送完成后清零复原，保证不影响后续整字节通信。
-    *   `self.last_rx_bits`: 实例属性，每次 `transceive` 完成后自动更新为 `CIU_Control`（`0x633C`）的 `RxLastBits[2:0]`，供上层协议判断最后接收字节的有效位数（0 = 全字节有效）。
+*   **位帧收发支持**（PN532 与 CLRC663 均支持）:
+    *   `transceive(data, last_tx_bits=8)`: 在标准整字节发送基础上支持位帧发送。
+        *   PN532: `last_tx_bits` 非 8 时，发送前写 `CIU_BitFraming`（`0x633D`）的 `TxLastBits[2:0]`，发送完成后清零复原。
+        *   CLRC663: 通过修改 `TxDataNum`（`0x2E`）寄存器的 `TxLastBits[2:0]` 位域实现，发送完成后复原。
+    *   `self.last_rx_bits`: 实例属性，每次 `transceive` 完成后自动更新为最后接收字节的有效位数（0 = 全字节有效）。
+        *   PN532: 读取 `CIU_Control`（`0x633C`）的 `RxLastBits[2:0]`。
+        *   CLRC663: 读取 `RxBitCtrl`（`0x0C`）的 `RxLastBits[2:0]`。
 
 ### 注册表与会话系统 (Registry & Session)
 *   **目录**: `src/nfctester/registry.py`
@@ -121,8 +131,8 @@
 外部项目（如 `CarrotFMTester`）依赖 `nfctester` 时，应遵循以下规范：
 
 *   **禁止直接 import 内部模块**: 不得 `from nfctester.hardware.serial_transport import SerialTransport` 或 `from nfctester.drivers.pn532_hsu import PN532_HSU`。这会耦合到具体实现，违反插件化设计。
-*   **统一使用 Registry 创建读卡器**: `CardReaderRegistry.create("pn532", transport="serial", port="COM20")` 一行完成 transport + reader 的创建与注入。
-*   **使用 Session 管理生命周期**: `with session("pn532", transport="serial", port="COM20") as s:` 自动处理 connect/disconnect，避免遗漏断开连接。
+*   **统一使用 Registry 创建读卡器**: `CardReaderRegistry.create("pn532", transport="serial", port="COM20")` 或 `CardReaderRegistry.create("clrc663", transport="serial", port="COM4")` 一行完成 transport + reader 的创建与注入。
+*   **使用 Session 管理生命周期**: `with session("pn532", transport="serial", port="COM20") as s:` 或 `with session("clrc663", transport="serial", port="COM4") as s:` 自动处理 connect/disconnect，避免遗漏断开连接。
 *   **卡片类接收 reader 实例**: 自定义卡片类（如 `SM7Card`）的构造函数应接受 `reader` 参数，不关心 reader 的创建方式。
 
 ## 5. 依赖项

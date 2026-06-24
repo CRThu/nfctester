@@ -4,14 +4,14 @@
 [![Python](https://img.shields.io/badge/Python-3.14+-blue.svg)](https://www.python.org/downloads/)
 [![Version](https://img.shields.io/badge/version-0.0.38-green.svg)](pyproject.toml)
 
-`nfctester` 是一个专为 RFID/NFC 卡片与 PN532 读卡器设计的自动化测试框架。项目采用严谨的分层架构设计，实现了硬件通信、芯片驱动、卡片逻辑与加密算法的深度解耦，旨在为 RFID 技术研究、漏洞分析及产品测试提供一个健壮且易于扩展的基础平台。
+`nfctester` 是一个专为 RFID/NFC 卡片与读卡器设计的自动化测试框架。项目采用严谨的分层架构设计，实现了硬件通信、芯片驱动、卡片逻辑与加密算法的深度解耦，旨在为 RFID 技术研究、漏洞分析及产品测试提供一个健壮且易于扩展的基础平台。支持 PN532 和 CLRC663 两种读卡器，通过注册表机制实现无缝切换。
 
 ## 🌟 核心特性
 
 - **分层架构**: 清晰的 8 层体系结构，模块化程度高，易于维护与扩展。
 - **广泛的协议支持**:
   - **卡片**: Mifare Classic, ISO14443A, NFC Forum Type 2 Tag (NTAG21x/22x 等)。
-  - **芯片**: 深度优化 PN532 HSU (High Speed UART) 驱动，支持位帧 (Bit-framing) 收发。
+  - **芯片**: 深度优化 PN532 HSU 和 CLRC663 UART 驱动，均支持位帧 (Bit-framing) 收发。
 - **强大加密支持**: 内置 AES-128 (CBC)、Mifare Crypto1 算法引擎，支持 NTAG22x AES 互认证。
 - **可视化跟踪**: 独特的跟踪控制层与协议解析层，提供树状结构化的通信日志输出，完美还原协议交互细节。
 - **插件化扩展**: 通过 Registry 模式，外部只需 `.py` 文件 + 装饰器即可接入自定义读卡器，无需打包。
@@ -21,7 +21,7 @@
 项目遵循高度抽象的设计模式，分为以下八层：
 
 1.  **硬件传输层 (Hardware)**: 负责底层字节流传输（如 `SerialTransport`）。
-2.  **驱动层 (Driver)**: 实现特定芯片（如 PN532）的协议封装与寄存器操作。
+2.  **驱动层 (Driver)**: 实现特定芯片（如 PN532、CLRC663）的协议封装与寄存器操作。
 3.  **注册表与会话 (Registry)**: 类注册、会话管理，贯穿硬件层与驱动层。
 4.  **卡片逻辑层 (Card)**: 定义各种 RFID 标签与智能卡的协议行为（Mifare, NTAG 等）。
 5.  **加密算法层 (Crypto)**: 提供原子级的加密/解密操作（AES, Crypto1）。
