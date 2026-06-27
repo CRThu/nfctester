@@ -1,6 +1,6 @@
 [project]
 name = "nfctester"
-version = "0.0.38"
+version = "0.0.39"
 description = "A RFID/NFC automation testing framework for cards and readers."
 readme = "README.md"
 requires-python = ">=3.14"
@@ -45,7 +45,7 @@ dev = [
 
 
 [tool.bumpversion]
-current_version = "0.0.38"
+current_version = "0.0.39"
 commit = true
 tag = true
 allow_dirty = true
