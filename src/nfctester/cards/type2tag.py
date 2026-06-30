@@ -22,9 +22,9 @@ class Type2Tag(BaseTag):
         """
         cmd = bytes([self.CMD_READ, page_addr])
         res = self.transceive(cmd)
-        if not res:
+        if not res.data:
             raise RuntimeError(f"Type 2 Tag read_page(0x{page_addr:02X}) failed: No response from card")
-        return res
+        return res.data
 
     def write_page(self, page_addr: int, data: bytes):
         """
@@ -36,14 +36,12 @@ class Type2Tag(BaseTag):
             raise ValueError("Type 2 Tag write_page requires exactly 4 bytes of data")
 
         cmd = bytes([self.CMD_WRITE, page_addr]) + data
-        self.reader.set_crc(True, False)
-        res = self.transceive(cmd)
-        self.reader.set_crc(True, True)
+        res = self.transceive(cmd, tx_crc=True, rx_crc=False)
 
-        if not res:
+        if not res.data:
             raise RuntimeError(f"Type 2 Tag write_page(0x{page_addr:02X}) failed: No response from card")
-        if res != b'\x0A':
-            raise RuntimeError(f"Type 2 Tag write_page(0x{page_addr:02X}) failed: NAK(0x{res.hex(' ').upper()}) from card")
+        if res.data != b'\x0A':
+            raise RuntimeError(f"Type 2 Tag write_page(0x{page_addr:02X}) failed: NAK(0x{res.data.hex(' ').upper()}) from card")
         
     def read_ndef(self) -> dict:
         """
@@ -69,10 +67,10 @@ class Type2Tag(BaseTag):
         ptr = 0
         while ptr < len(data):
             t = data[ptr]
-            if t == 0x00: # NULL TLV
+            if t == 0x00:  # NULL TLV
                 ptr += 1
                 continue
-            if t == 0xFE: # Terminator TLV
+            if t == 0xFE:  # Terminator TLV
                 break
                 
             # 解析 L (长度)
@@ -80,7 +78,7 @@ class Type2Tag(BaseTag):
             if ptr >= len(data): break
             l = data[ptr]
             ptr += 1
-            if l == 0xFF: # 3 字节长度格式
+            if l == 0xFF:  # 3 字节长度格式
                 if ptr + 1 >= len(data): break
                 l = (data[ptr] << 8) | data[ptr+1]
                 ptr += 2

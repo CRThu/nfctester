@@ -19,12 +19,13 @@ class NTAG21x(Type2Tag):
         发送 0x60 指令，获取 8 字节版本信息
         """
         cmd = bytes([self.CMD_GET_VERSION])
-        return self.transceive(cmd)
+        res = self.transceive(cmd)
+        return res.data
 
     def auth(self, password: bytes) -> bytes:
         """
-        发送 0x1B 指令进行密码
-        认证认证流程说明：
+        发送 0x1B 指令进行密码认证
+        认证流程说明：
         1. 发送 0x1B + 4字节 PWD。
         2. 如果 PWD 正确：芯片返回 2 字节的 PACK (Password Acknowledge)。
             - PACK 的值存储在配置区的特定地址（如 NTAG213 的 Page 0x2C 的 Byte 0-1）。
@@ -40,18 +41,18 @@ class NTAG21x(Type2Tag):
 
         # 1. 组装指令: 0x1B + 4字节密码
         cmd = bytes([self.CMD_PWD_AUTH]) + password
-        
+
         # 2. 发送指令
         # 注意：如果认证失败，芯片会返回 4-bit 的 NAK (0x0)，
         # 许多读写器驱动（如 PN532）会将 NAK 转换成通信超时或传输错误异常。
         res = self.transceive(cmd)
         
         # 3. 验证响应
-        if res is None or len(res) == 0:
+        if res.data is None or len(res.data) == 0:
             raise PermissionError("Authentication failed: No response (NAK)")
 
         # NTAG21x 认证成功会返回 2 字节的 PACK
-        if len(res) == 2:
-            return res 
+        if len(res.data) == 2:
+            return res.data
         else:
-            raise PermissionError(f"Authentication failed: Unexpected response length {len(res)}")
+            raise PermissionError(f"Authentication failed: Unexpected response length {len(res.data)}")

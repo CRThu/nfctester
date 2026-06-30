@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from ..drivers.card_reader import TransceiveResult
 
 
 class BaseTag(ABC):
@@ -9,9 +10,9 @@ class BaseTag(ABC):
     def __init__(self, reader):
         self.reader = reader
 
-    def transceive(self, data: bytes) -> bytes:
+    def transceive(self, data: bytes, **kwargs) -> TransceiveResult:
         """透传数据到读卡器"""
-        return self.reader.transceive(data)
+        return self.reader.transceive(data, **kwargs)
 
     @abstractmethod
     def read_page(self, page_addr: int) -> bytes:

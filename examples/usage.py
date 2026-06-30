@@ -21,19 +21,18 @@ reader = CardReaderRegistry.create("pn532", transport="serial", port="COM20")
 print(f"\nCreated: {type(reader).__name__}")
 
 # ============================================================
-# 2. Session: 上下文管理器（自动 connect/disconnect）
+# 2. Session: 上下文管理器（自动 open/close）
 # ============================================================
 
 # 方式 A: 创建新 reader
 # with session("pn532", transport="serial") as s:
-#     tag = s.find()
+#     tag = s.active()
 #     if tag:
-#         s.set_crc(False, False)
-#         s.transceive(b"\x26", last_tx_bits=7)
+#         s.transceive_bits(b"\x26", last_tx_bits=7, tx_crc=False, rx_crc=False)
 
 # 方式 B: 传入已有 reader
 # with session(reader=reader) as s:
-#     tag = s.find()
+#     tag = s.active()
 
 # ============================================================
 # 3. CardRegistry: 卡片注册与动态实例化
@@ -45,7 +44,7 @@ for name in CardRegistry.list():
     print(f"  - {name}")
 
 # 示例：动态创建卡片实例
-# tag = reader.find()
+# tag = reader.active()
 # if tag:
 #     card = CardRegistry.create("mifare_classic", reader=reader)
 #     print(f"Card instance: {type(card).__name__}")

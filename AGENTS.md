@@ -17,21 +17,32 @@
 *   **已注册驱动**:
     *   `PN532_HSU`（注册为 `"pn532"`）: PN532 HSU 协议驱动，通过 NXP 标准帧格式通信。包含 ACK 处理、唤醒序列（Wakeup）、以及读取/写入数据帧。采用"请求-响应模式"，通过私有方法 `_req` 统一调度 `发送 -> 读取 -> 基础校验` 周期。
     *   `CLRC663`（注册为 `"clrc663"`）: CLRC663 UART 协议驱动，通过串口寄存器读写和 FIFO 命令机制与芯片通信。支持 ISO/IEC 14443A 协议，可无缝替换 PN532 读卡器。
+*   **CardReader ABC 接口**（`card_reader.py`）:
+    *   **数据结构**:
+        *   `CardInfo`: 寻卡结果数据类，包含 `uid` (bytes)、`atq` (bytes)、`sak` (int)。
+        *   `TransceiveResult`: 收发结果数据类，包含 `data` (bytes | None) 和 `rx_bits` (int)（最后字节有效位数，0 = 整字节有效）。
+    *   **生命周期**: `open()` 初始化硬件，`close()` 释放资源。
+    *   **RF 控制**: `rf_field` 属性（getter/setter），开关物理天线驱动。
+    *   **寻卡**: `active()` (REQA → anticoll → SELECT)，`wakeup()` (WUPA → anticoll → SELECT，含 HALT 状态)，`halt()` (HLTA 去选)。
+    *   **Mifare**: `mf_crypto` 属性（读取加密引擎状态），`mf_auth(block, key_type, key, uid)`（执行 Mifare Classic 认证，成功后 `mf_crypto` 变为 True，后续 `transceive` 自动加密）。
+    *   **数据交换**: `transceive(data, tx_crc, rx_crc)` 返回 `TransceiveResult`；`transceive_bits(data, last_tx_bits, tx_crc, rx_crc)` 支持位级发送。
+    *   **CRC 控制**: `set_crc()` 已移除公开接口，CRC 通过 `transceive`/`transceive_bits` 的 `tx_crc`/`rx_crc` 参数控制。驱动内部仍使用 `_set_crc()` 私有方法。
+    *   **已移除**: `exchange()` 方法（合并入 `transceive`），`set_rf_field()`/`get_rf_field()` 方法（改为 `rf_field` 属性）。
 *   **CLRC663 驱动特点**:
     *   **UART 协议**: 使用 7 位地址 + R/W 位的寄存器读写协议。写操作发送 2 字节（地址 + 数据），读操作发送 1 字节（地址）并接收 1 字节（数据）。写操作后校验芯片回传的地址字节，不匹配时输出警告。
     *   **命令执行**: 通过写入 Command 寄存器启动命令，使用 FIFO 缓冲区交换数据，通过 IRQ0 寄存器轮询命令完成状态。
-    *   **寻卡流程**: 手动实现 ISO 14443-A REQA → 抗冲突 → SELECT 序列，通过 TxDataNum 寄存器控制 7 位短帧（REQA）和标准帧（抗冲突/选择）。`select()` 方法先发送 WUPA 唤醒 HALT 状态的卡片，再调用 `find()` 完成完整寻卡。
-    *   **Transceive 机制**: 底层 `_transceive_raw()` 方法遵循 idle → flush FIFO → 写数据 → 清 IRQ → 启动命令的固定序列，确保每次通信状态干净。
-    *   **错误解码**: Error 寄存器位通过 `CLRC663_ERRORS` 字典映射为可读描述，`exchange()` 和 `transceive()` 错误日志包含具体错误类型（如协议错误、碰撞、CRC 错误等）。
-*   **PN532 驱动寄存器辅助方法**:
-    *   `_read_reg(address)`: 读取 16 位地址的寄存器值（PN532 指令 0x06）。
-    *   `_write_reg(address, value)`: 写入寄存器（PN532 指令 0x08）。
-    *   `_modify_reg(address, mask, value)`: 读-改-写，只修改 `mask` 指定的位域，其余位保持不变。`set_crc` 等方法均统一使用此接口。
+    *   **寻卡流程**: 手动实现 ISO 14443-A REQA → 抗冲突 → SELECT 序列，通过 TxDataNum 寄存器控制 7 位短帧（REQA）和标准帧（抗冲突/选择）。`wakeup()` 方法发送 WUPA 唤醒 HALT 状态的卡片。
+    *   **Transceive 机制**: 底层 `_do_transceive()` 方法遵循 idle → flush FIFO → 写数据 → 清 IRQ → 启动命令的固定序列，确保每次通信状态干净。返回 `TransceiveResult`。
+    *   **Mifare 硬件认证**: 使用 CLRC663 的 MFAuthent 命令（CMD_AUTHENT 0x0E），需要将密钥写入 Key RAM、UID 写入 UID RAM，认证成功后 `_mf_crypto_active` 标志置 True。
+    *   **错误解码**: Error 寄存器位通过 `CLRC663_ERRORS` 字典映射为可读描述，`transceive()` 错误日志包含具体错误类型（如协议错误、碰撞、CRC 错误等）。
+*   **PN532 驱动特点**:
+    *   **寄存器辅助方法**: `_read_reg(address)` / `_write_reg(address, value)` / `_modify_reg(address, mask, value)`，用于直接操作 PN532 CIU 寄存器。
+    *   **Mifare 硬件认证**: 使用 PN532 的 TgInitAsTarget 或 InDataExchange（指令 0x40），认证成功后 `_mf_crypto_active` 标志置 True，后续 `transceive` 自动切换到 InDataExchange。
 *   **位帧收发支持**（PN532 与 CLRC663 均支持）:
-    *   `transceive(data, last_tx_bits=8)`: 在标准整字节发送基础上支持位帧发送。
-        *   PN532: `last_tx_bits` 非 8 时，发送前写 `CIU_BitFraming`（`0x633D`）的 `TxLastBits[2:0]`，发送完成后清零复原。
+    *   `transceive_bits(data, last_tx_bits=0, tx_crc=True, rx_crc=True)`: 在标准整字节发送基础上支持位帧发送，返回 `TransceiveResult`。
+        *   PN532: `last_tx_bits` 非 0 时，发送前写 `CIU_BitFraming`（`0x633D`）的 `TxLastBits[2:0]`，发送完成后清零复原。
         *   CLRC663: 通过修改 `TxDataNum`（`0x2E`）寄存器的 `TxLastBits[2:0]` 位域实现，发送完成后复原。
-    *   `self.last_rx_bits`: 实例属性，每次 `transceive` 完成后自动更新为最后接收字节的有效位数（0 = 全字节有效）。
+    *   `TransceiveResult.rx_bits`: 每次收发完成后自动更新为最后接收字节的有效位数（0 = 全字节有效）。
         *   PN532: 读取 `CIU_Control`（`0x633C`）的 `RxLastBits[2:0]`。
         *   CLRC663: 读取 `RxBitCtrl`（`0x0C`）的 `RxLastBits[2:0]`。
 
@@ -42,7 +53,7 @@
     *   `TransportRegistry`: 传输层类注册表。使用 `@TransportRegistry.register("name")` 装饰器注册 Transport 实现，`TransportRegistry.create("name", **kwargs)` 实例化。
     *   `CardReaderRegistry`: 读卡器类注册表。使用 `@CardReaderRegistry.register("name")` 装饰器注册 CardReader 实现。`CardReaderRegistry.create("name", transport="serial", **kwargs)` 可一行创建 reader（自动创建 transport 并注入）。
     *   `CardRegistry`: 卡片类注册表。使用 `@CardRegistry.register("name")` 装饰器注册 Card 实现。`CardRegistry.create("name", reader, **kwargs)` 可动态创建卡片实例。
-    *   `Session` / `session()`: 上下文管理器，封装 reader 的 connect/disconnect 生命周期，类似 C# 的 `using`。通过 `__getattr__` 委托所有 reader 方法调用，无需显式透传。
+    *   `Session` / `session()`: 上下文管理器，封装 reader 的 open/close 生命周期，类似 C# 的 `using`。通过 `__getattr__` 委托所有 reader 方法调用，无需显式透传。
 *   **入口点发现**: `load_entry_points()` 在包初始化时扫描 `nfctester.transports` / `nfctester.readers` entry-points，自动注册外部包的实现。
 *   **外部扩展**: 外部脚本只需继承 `CardReader` 基类并用 `@CardReaderRegistry.register("name")` 装饰，import 即注册，无需打包。
 
@@ -51,14 +62,14 @@
 *   **职责**: 实现各种 RFID 卡片协议逻辑（如 ISO14443A, Mifare Classic）。
 *   **核心类**: `BaseTag`, `BaseCard`, `MifareClassicCard`, `Type2Tag`。
 *   **逻辑**: 
-    *   **BaseTag**: 针对简单标签的基类，定义了通用的 `read_page` 和 `write_page` 接口。
+    *   **BaseTag**: 针对简单标签的基类，定义了通用的 `read_page` 和 `write_page` 接口。`transceive()` 透传到 reader 的 `transceive()` 并解包 `TransceiveResult.data`。
     *   **BaseCard**: 针对加密智能卡的基类，包含 `authenticate` 和钱包操作等复杂功能。
-    *   `MifareClassicCard`: 继承自 `BaseCard`，实现完整的 Mifare Classic 指令集。`authenticate()` 内部自动调用 `find()` 获取 UID（Mifare 认证协议要求）。
-    *   `Type2Tag`: 继承自 `BaseTag`，实现 NFC Forum Type 2 Tag 标准指令集（如 NTAG 读写）。整合了 NDEF 解析能力 (`get_ndef`)。
+    *   `MifareClassicCard`: 继承自 `BaseCard`，实现完整的 Mifare Classic 指令集。`authenticate()` 内部调用 `reader.mf_auth()` 执行硬件认证，UID 由卡片自身的 `active()` 获取后传入。
+    *   `Type2Tag`: 继承自 `BaseTag`，实现 NFC Forum Type 2 Tag 标准指令集（如 NTAG 读写）。`write_page` 使用 `transceive(cmd, tx_crc=True, rx_crc=False)` 控制 CRC。整合了 NDEF 解析能力 (`get_ndef`)。
     *   `NTAG21x`: 继承自 `Type2Tag`，针对 NXP NTAG21x 系列扩展了版本读取 (`get_version`) 和密码认证 (`auth`) 功能。
     *   `NTAG22x`: 继承自 `Type2Tag`，针对 NXP NTAG22x DNA 系列扩展了基于 AES-128 的双向互认证 (`auth`)。
-    *   **认证逻辑**: Mifare Classic 的 `authenticate` 使用 PN532 硬件认证，需要 UID（由 `find()` 自动获取）。其他卡片类型的认证由各自的 `auth()` 方法处理。
-    *   **构造约定**: 所有卡片类构造函数仅接收 `reader` 参数，不接收 `uid`。UID 通过 `find()` 或首次认证时自动获取。
+    *   **认证逻辑**: Mifare Classic 的 `authenticate` 使用 reader 级别的 `mf_auth()` 硬件认证，需要 UID（由 `active()` 自动获取）。其他卡片类型的认证由各自的 `auth()` 方法处理。
+    *   **构造约定**: 所有卡片类构造函数仅接收 `reader` 参数，不接收 `uid`。UID 通过 `active()` 或首次认证时自动获取。
 
 ### 第四层：加密算法层 (Crypto Layer)
 *   **目录**: `src/nfctester/crypto/`
@@ -120,7 +131,7 @@
         *   `tests/drivers/`: 硬件驱动层测试。
         *   `tests/utils/`: 通用工具层测试（如 CRC 校验）。
     *   执行特定模块测试: `uv run pytest tests/crypto/`
-*   **配置**: 硬件参数（如 COM 端口）应通过环境变量 `NFCTESTER_PORT` 或配置文件读取，严禁硬编码在核心库中。
+*   **配置**: 硬件参数（如 COM 端口）应通过环境变量 `NFCTESTER_PORT` 或命令行参数 `--port` / `--reader` 读取，严禁硬编码在核心库中。
 *   **代码规范**: 
     *   方法和类必须有 Docstring。
     *   注释应简洁明了。
@@ -132,7 +143,7 @@
 
 *   **禁止直接 import 内部模块**: 不得 `from nfctester.hardware.serial_transport import SerialTransport` 或 `from nfctester.drivers.pn532_hsu import PN532_HSU`。这会耦合到具体实现，违反插件化设计。
 *   **统一使用 Registry 创建读卡器**: `CardReaderRegistry.create("pn532", transport="serial", port="COM20")` 或 `CardReaderRegistry.create("clrc663", transport="serial", port="COM4")` 一行完成 transport + reader 的创建与注入。
-*   **使用 Session 管理生命周期**: `with session("pn532", transport="serial", port="COM20") as s:` 或 `with session("clrc663", transport="serial", port="COM4") as s:` 自动处理 connect/disconnect，避免遗漏断开连接。
+*   **使用 Session 管理生命周期**: `with session("pn532", transport="serial", port="COM20") as s:` 或 `with session("clrc663", transport="serial", port="COM4") as s:` 自动处理 open/close，避免遗漏断开连接。
 *   **卡片类接收 reader 实例**: 自定义卡片类（如 `SM7Card`）的构造函数应接受 `reader` 参数，不关心 reader 的创建方式。
 
 ## 5. 依赖项

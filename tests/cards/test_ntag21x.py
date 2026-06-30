@@ -5,8 +5,8 @@ from nfctester.trace import trace
 @pytest.fixture
 def ntag(card_reader):
     """获取 NTAG21x 实例的 fixture"""
-    tag = card_reader.find()
-    assert tag is not None, "未找到卡片，请确保 NTAG21x 标签已放置在读卡器上"
+    card_info = card_reader.active()
+    assert card_info is not None, "未找到卡片，请确保 NTAG21x 标签已放置在读卡器上"
     return NTAG21x(card_reader)
 
 def test_ntag_get_version(ntag):
@@ -40,11 +40,11 @@ def test_ntag_auth_and_protection(ntag):
     cc = ntag.read_page(3)
     capacity = cc[2] * 8
     
-    if capacity <= 144: # NTAG213
+    if capacity <= 144:  # NTAG213
         cfg_base = 0x29
-    elif capacity <= 496: # NTAG215
+    elif capacity <= 496:  # NTAG215
         cfg_base = 0x83
-    else: # NTAG216
+    else:  # NTAG216
         cfg_base = 0xE3
         
     auth0_addr = cfg_base
@@ -76,5 +76,3 @@ def test_ntag_auth_and_protection(ntag):
             ntag.write_page(pwd_addr, b'\xFF\xFF\xFF\xFF')
         except Exception as e:
             trace.error(f"Failed to restore tag state: {e}")
-
-

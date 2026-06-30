@@ -4,8 +4,8 @@ from nfctester.cards import Type2Tag
 @pytest.fixture
 def t2t_card(card_reader):
     """获取 Type2Tag 实例的 fixture"""
-    tag = card_reader.find()
-    assert tag is not None, "未找到卡片，请确保 NFC 标签已放置在读卡器上"
+    card_info = card_reader.active()
+    assert card_info is not None, "未找到卡片，请确保 NFC 标签已放置在读卡器上"
     return Type2Tag(card_reader)
 
 @pytest.mark.t2t

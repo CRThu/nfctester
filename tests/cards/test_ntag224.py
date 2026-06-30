@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from nfctester.cards import NTAG224
+from nfctester.drivers.card_reader import TransceiveResult
 
 # --- Mock Tests ---
 def test_ntag224_auth_mock():
@@ -30,7 +31,10 @@ def test_ntag224_auth_mock():
     res1 = bytes([0xAF]) + ek_RndB
     # Step 2 响应: 00 + ek(RndA')
     res2 = bytes([0x00]) + ek_RndA_prime
-    mock_reader.transceive.side_effect = [res1, res2]
+    mock_reader.transceive.side_effect = [
+        TransceiveResult(data=res1, rx_bits=0),
+        TransceiveResult(data=res2, rx_bits=0),
+    ]
     
     # 2. 创建卡片对象
     tag = NTAG224(mock_reader)
@@ -55,8 +59,8 @@ def test_ntag224_auth_mock():
 @pytest.fixture
 def card(card_reader):
     """获取 NTAG224Card 实例的 fixture"""
-    tag = card_reader.find()
-    assert tag is not None, "未发现卡片，请确认已放置在读卡器上"
+    card_info = card_reader.active()
+    assert card_info is not None, "未发现卡片，请确认已放置在读卡器上"
     return NTAG224(card_reader)
 
 @pytest.mark.ntag224
@@ -78,7 +82,7 @@ def test_ntag224_auth(card):
 def test_ntag224_read_protected_page(card):
     """3. 测试认证后读取受保护页面 (Page 4)"""
     key = bytes.fromhex("000102030405060708090A0B0C0D0E0F")
-    card.auth(key) # Re-authenticate because the fixture provides a new instance
+    card.auth(key)
     data = card.read_page(4)
     assert data is not None
     assert len(data) == 16

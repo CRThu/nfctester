@@ -1,5 +1,5 @@
 import time
-from .card_reader import CardReader
+from .card_reader import CardReader, CardInfo, TransceiveResult
 from nfctester.trace import trace
 from nfctester.registry import CardReaderRegistry
 
@@ -43,19 +43,20 @@ class PN532_HSU(CardReader):
         # 最近一次 transceive 收到数据后 CIU_Control.RxLastBits[2:0] 的值
         # 0 表示最后一个字节全部有效（即整字节），非 0 表示最后字节有效位数
         self.last_rx_bits = 0
+        self._mf_crypto_active = False
 
     # --- 私有辅助方法 (协议具体实现) ---
     def _send_frame(self, data: bytes):
         """封装并发送 NXP 标准帧"""
         # 数据长度 = TFI (1字节) + DATA
-        length = len(data) + 1 
+        length = len(data) + 1
         # LCS (长度校验和): LEN + LCS = 0x00
         lcs = (256 - length) & 0xFF
         # TFI (方向): 上位机到PN532固定为 0xD4
         tfi = 0xD4
         # DCS (数据校验和): TFI + DATA + DCS = 0x00
         dcs = (256 - (tfi + sum(data))) & 0xFF
-        
+
         # 帧结构: 00 00 FF [LEN] [LCS] [TFI] [DATA] [DCS] 00
         frame = b'\x00\x00\xFF' + bytes([length]) + bytes([lcs]) + bytes([tfi]) + data + bytes([dcs]) + b'\x00'
         self.transport.write(frame)
@@ -67,35 +68,35 @@ class PN532_HSU(CardReader):
         ack = self.transport.read(6)
         if len(ack) > 0:
             self.trace.driver(rx=ack)
-            
-        if ack != b'\x00\x00\xff\x00\xff\x00': 
+
+        if ack != b'\x00\x00\xff\x00\xff\x00':
             self.transport.flush_input()
             return None
-        
+
         # 读取数据帧头
-        header = self.transport.read(3) # 00 00 FF
+        header = self.transport.read(3)  # 00 00 FF
         if len(header) < 3: return None
-        
+
         length = self.transport.read(1)[0]
         lcs = self.transport.read(1)[0]
-        tfi = self.transport.read(1)[0] # 应为 0xD5
+        tfi = self.transport.read(1)[0]  # 应为 0xD5
         data = self.transport.read(length - 1)
         dcs = self.transport.read(1)[0]
         post = self.transport.read(1)[0]
-        
+
         full_frame = header + bytes([length, lcs, tfi]) + data + bytes([dcs, post])
         self.trace.driver(rx=full_frame)
-        
+
         return data
 
     def _req(self, data: bytes) -> bytes:
         """统一请求周期：发送 -> 读取 -> 基础响应校验"""
         self._send_frame(data)
         res = self._read_frame()
-        
+
         if res is None:
             self.trace.error(f"PN532 指令 0x{data[0]:02X} 执行失败")
-            
+
         return res
 
     def _read_reg(self, address: int) -> int:
@@ -141,13 +142,70 @@ class PN532_HSU(CardReader):
         new_val = (current & ~mask) | (value & mask)
         self._write_reg(address, new_val)
 
+    def _set_crc(self, tx_enabled: bool, rx_enabled: bool):
+        """配置 CRC 校验（内部使用）"""
+        self._modify_reg(0x6302, 0x80, 0x80 if tx_enabled else 0x00)
+        self._modify_reg(0x6303, 0x80, 0x80 if rx_enabled else 0x00)
+
+    def _do_anticollision_select(self, sel_cmd: int) -> tuple[bytes, int] | None:
+        """执行单级抗冲突 + SELECT 流程"""
+        # Anti-collision (无 CRC)
+        self._set_crc(False, False)
+        self._write_reg(0x633D, 0x07, 0x00)
+        cmd = bytes([sel_cmd, 0x20])
+        full_cmd = b'\x42' + cmd
+        res = self._req(full_cmd)
+        if res is None or len(res) < 2 or res[0] != 0x43 or res[1] != 0x00:
+            return None
+        anticoll = res[2:]
+        if len(anticoll) < 5:
+            return None
+
+        uid = anticoll[:4]
+        bcc = anticoll[4]
+        if bcc != (uid[0] ^ uid[1] ^ uid[2] ^ uid[3]):
+            self.trace.error("BCC check failed")
+            return None
+
+        # SELECT (带 CRC)
+        self._set_crc(True, True)
+        self._write_reg(0x633D, 0x07, 0x00)
+        cmd = bytes([sel_cmd, 0x70]) + uid + bytes([bcc])
+        full_cmd = b'\x42' + cmd
+        res = self._req(full_cmd)
+        if res is None or len(res) < 2 or res[0] != 0x43 or res[1] != 0x00:
+            return None
+        sak_data = res[2:]
+        if not sak_data:
+            return None
+
+        return (anticoll, sak_data[0])
+
+    def _do_anticollision_select_all(self) -> tuple[bytes, int] | None:
+        """执行完整抗冲突 + SELECT 流程，自动处理级联"""
+        full_uid = bytearray()
+        sak = 0
+        for sel_cmd in [0x93, 0x95, 0x97]:
+            result = self._do_anticollision_select(sel_cmd)
+            if result is None:
+                return None
+            anticoll, sak = result
+            is_cascade = (anticoll[0] == 0x88)
+            if is_cascade:
+                full_uid.extend(anticoll[1:4])
+            else:
+                full_uid.extend(anticoll[:4])
+                break
+        return (bytes(full_uid), sak)
+
     # --- CardReader 接口实现 ---
-    def connect(self):
+
+    def open(self):
         wake_cmd = b'\x55\x55\x00\x00\x00\x00\x00\x00\x00\x00\xFF\x03\xFD\xD4\x14\x01\x17\x00'
         self.transport.write(wake_cmd)
         time.sleep(0.1)
         self.transport.flush_input()
-        
+
         # 配置 SAM 为普通模式
         self._req(b'\x14\x01\x00')
 
@@ -158,7 +216,7 @@ class PN532_HSU(CardReader):
         Byte 2: MxRtyPSL (默认 0x01)
         Byte 3: MxRtyPassiveActivation (设为 0x01，即重试一次，保证卡片多次REQA可成功进入ACTIVE)
         """
-        self._req(b'\x32\x05\x01\x01\x01') 
+        self._req(b'\x32\x05\x01\x01\x01')
 
         # 配置 Force100ASK (CIU_TxAuto 0x6305, bit 6)
         self._modify_reg(0x6305, 0x40, 0x40)
@@ -166,53 +224,34 @@ class PN532_HSU(CardReader):
         # 配置 Initiator 模式 (CIU_Control 0x633C, bit 4)
         self._modify_reg(0x633C, 0x10, 0x10)
 
+        self._mf_crypto_active = False
         self.trace.success("PN532 HSU 初始化成功")
+
+    def close(self):
+        try:
+            self._req(b'\x52\x00')
+        except Exception as e:
+            self.trace.error(f"下发结束指令失败: {e}")
+        finally:
+            self.transport.close()
 
     def get_version(self) -> bytes:
         return self._req(b'\x02')
 
-    def find(self) -> dict:
-        """寻卡操作（检测并激活卡片为活跃 Target 资源）"""
-        self.transport.flush_input()
-        res = self._req(b'\x4A\x01\x00')
-        # PN532 响应格式：0xD5 0x4B [NbTg] [Tg1] ...
-        if res and len(res) >= 2 and res[0] == 0x4B:
-            nb_targets = res[1]
-            if nb_targets > 0:
-                trace.debug(f"{'uid':<12}: {res[7:7+res[6]].hex(' ').upper()}")
-                trace.debug(f"{'atq':<12}: {res[3:5].hex(' ').upper()}")
-                trace.debug(f"{'sak':<12}: {hex(res[5])}")
-                trace.debug(f"{'raw':<12}: {res.hex(' ').upper()}")
-                return {"uid": res[7:7+res[6]], "atq": res[3:5], "sak": res[5], "raw": res}
-        return None
+    # --- RF 控制 ---
 
-    def select(self) -> dict:
-        """唤醒并重新选择卡片（重新寻卡激活Target 资源，发送WUPA）"""
-        try:
-            self._req(b'\x52\x01')
-        except Exception:
-            pass
-        return self.find()
-
-    def deselect(self) -> bool:
-        """去选 Target 1 卡片（逻辑去选 Target 资源，发送HLTA）"""
-        res = self._req(b'\x44\x01')
-        if res and len(res) >= 2 and res[0] == 0x45:
-            return res[1] == 0x00
+    @property
+    def rf_field(self) -> bool:
+        """通过读取 0x6304 寄存器判断物理天线驱动状态。"""
+        reg_val = self._read_reg(0x6304)
+        if reg_val is not None:
+            # Bit 1 (Tx2RFEn) | Bit 0 (Tx1RFEn)
+            # 只要任意一个驱动使能，物理 RF 场就应处于开启状态
+            return (reg_val & 0x03) != 0
         return False
 
-    def set_crc(self, tx_enabled: bool, rx_enabled: bool):
-        """
-        配置 PN532 的 CRC 校验权
-        :param tx_enabled: 是否开启发送 CRC
-        :param rx_enabled: 是否开启接收 CRC
-        """
-        # 第 7 位为 TxCRCEn / RxCRCEn，使用 _modify_reg 读-改-写
-        self._modify_reg(0x6302, 0x80, 0x80 if tx_enabled else 0x00)
-        self._modify_reg(0x6303, 0x80, 0x80 if rx_enabled else 0x00)
-        # self.trace.debug(f"PN532 CRC 配置: TX={tx_enabled}, RX={rx_enabled}")
-
-    def set_rf_field(self, enabled: bool):
+    @rf_field.setter
+    def rf_field(self, enabled: bool):
         """
         开关 PN532 的 RF 场。
         :param enabled: True 开启 RF 场，False 关闭 RF 场
@@ -223,41 +262,119 @@ class PN532_HSU(CardReader):
         self._req(cmd)
         self.trace.debug(f"PN532 RF 场: {'开启' if enabled else '关闭'}")
 
-    def get_rf_field(self) -> bool:
-        """
-        通过读取 0x6304 寄存器判断物理天线驱动状态。
-        """
-        reg_val = self._read_reg(0x6304)
-        if reg_val is not None:
-            # Bit 1 (Tx2RFEn) | Bit 0 (Tx1RFEn)
-            # 只要任意一个驱动使能，物理 RF 场就应处于开启状态
-            return (reg_val & 0x03) != 0
-        return False
+    # --- 寻卡 ---
 
-    def exchange(self, data: bytes) -> bytes:
-        """封装 PN532 的 InDataExchange 指令发送给卡片"""
-        self.trace.protocol(tx=data)
-        # 0x40 (InDataExchange), 0x01 (Target 1)
-        full_cmd = b'\x40\x01' + data
-        res = self._req(full_cmd)
-        
-        # 响应格式: 0x41 (Response), Status, [Data]
-        if res and len(res) >= 2 and res[0] == 0x41:
-            if res[1] == 0x00:
-                self.trace.protocol(rx=res[2:])
-                return res[2:]
-            else:
-                err_msg = self.PN532_ERRORS.get(res[1], "未知错误")
-                self.trace.warning(f"指令交换返回错误状态: 0x{res[1]:02X} ({err_msg})")
+    def active(self) -> CardInfo | None:
+        """REQA → anticoll → SELECT"""
+        self.transport.flush_input()
+        res = self._req(b'\x4A\x01\x00')
+        # PN532 响应格式：0xD5 0x4B [NbTg] [Tg1] ...
+        if res and len(res) >= 2 and res[0] == 0x4B:
+            nb_targets = res[1]
+            if nb_targets > 0:
+                uid = res[7:7+res[6]]
+                atq = res[3:5]
+                sak = res[5]
+                trace.debug(f"{'uid':<12}: {uid.hex(' ').upper()}")
+                trace.debug(f"{'atq':<12}: {atq.hex(' ').upper()}")
+                trace.debug(f"{'sak':<12}: {hex(sak)}")
+                return CardInfo(uid=uid, atq=atq, sak=sak)
         return None
 
-    def transceive(self, data: bytes, last_tx_bits: int = 0) -> bytes:
+    def wakeup(self) -> CardInfo | None:
+        """WUPA → anticoll → SELECT"""
+        try:
+            self._req(b'\x52\x01')
+        except Exception:
+            pass
+        return self.active()
+
+    def halt(self) -> bool:
+        """HLTA"""
+        res = self._req(b'\x44\x01')
+        if res and len(res) >= 2 and res[0] == 0x45:
+            return res[1] == 0x00
+        return False
+
+    # --- Mifare ---
+
+    @property
+    def mf_crypto(self) -> bool:
+        return self._mf_crypto_active
+
+    def mf_auth(self, block: int, key_type: int, key: bytes, uid: bytes) -> bool:
         """
-        封装 PN532 的 InCommunicateThru 指令发送给卡片。
-        :param data:         要发送的数据
-        :param last_tx_bits: 最后字节的有效位数，默认 0（整字节）；
-                             非 0 时写 CIU_BitFraming.TxLastBits[2:0]，发送后清零复原。
-        完成后 self.last_rx_bits 保存 CIU_Control.RxLastBits[2:0]（0 表示整字节有效）。
+        Mifare Classic 认证（使用 PN532 硬件实现）。
+        认证成功后 mf_crypto 变为 True。
+        """
+        cmd = bytes([key_type, block]) + key + uid
+        self.trace.protocol(tx=cmd)
+        full_cmd = b'\x40\x01' + cmd
+        res = self._req(full_cmd)
+
+        if res and len(res) >= 2 and res[0] == 0x41:
+            if res[1] == 0x00:
+                self._mf_crypto_active = True
+                self.trace.protocol(rx=res[2:])
+                return True
+            else:
+                err_msg = self.PN532_ERRORS.get(res[1], "未知错误")
+                self.trace.warning(f"Mifare 认证失败: 0x{res[1]:02X} ({err_msg})")
+        return False
+
+    # --- 数据交换 ---
+
+    def transceive(self, data: bytes, tx_crc: bool = True, rx_crc: bool = True) -> TransceiveResult:
+        """
+        与卡片进行数据交换。
+        mf_crypto 为 True 时使用 InDataExchange（硬件自动加密），
+        否则使用 InCommunicateThru（透传）。
+        """
+        self.trace.protocol(tx=data)
+
+        if self._mf_crypto_active:
+            # InDataExchange: 自动处理 Mifare Crypto1 加密
+            # 0x40 (InDataExchange), 0x01 (Target 1)
+            full_cmd = b'\x40\x01' + data
+            res = self._req(full_cmd)
+            # 响应格式: 0x41 (Response), Status, [Data]
+            if res and len(res) >= 2 and res[0] == 0x41:
+                if res[1] == 0x00:
+                    self.trace.protocol(rx=res[2:])
+                    return TransceiveResult(data=res[2:], rx_bits=0)
+                else:
+                    err_msg = self.PN532_ERRORS.get(res[1], "未知错误")
+                    self.trace.warning(f"InDataExchange 返回错误: 0x{res[1]:02X} ({err_msg})")
+                    return TransceiveResult(data=None, rx_bits=0)
+        else:
+            # InCommunicateThru: 透传模式
+            # 0x42 (InCommunicateThru)
+            self._set_crc(tx_crc, rx_crc)
+            full_cmd = b'\x42' + data
+            res = self._req(full_cmd)
+
+            # 读取 CIU_Control (0x633C) bit[2:0] = RxLastBits
+            # 0 表示最后字节全部有效，非 0 表示最后字节有效位数
+            ciu_ctrl = self._read_reg(0x633C)
+            self.last_rx_bits = (ciu_ctrl & 0x07) if ciu_ctrl is not None else 0
+
+            if self.last_rx_bits != 0:
+                self.trace.debug(f"{'LAST_RX_BITS':<12}: {self.last_rx_bits}")
+
+            if res and len(res) >= 2 and res[0] == 0x43:
+                if res[1] == 0x00:
+                    self.trace.protocol(rx=res[2:])
+                    return TransceiveResult(data=res[2:], rx_bits=self.last_rx_bits)
+                else:
+                    err_msg = self.PN532_ERRORS.get(res[1], "未知错误")
+                    self.trace.warning(f"InCommunicateThru 返回错误: 0x{res[1]:02X} ({err_msg})")
+                    return TransceiveResult(data=res[2:] if len(res) > 2 else None, rx_bits=self.last_rx_bits)
+
+        return TransceiveResult(data=None, rx_bits=0)
+
+    def transceive_bits(self, data: bytes, last_tx_bits: int = 0, tx_crc: bool = True, rx_crc: bool = True) -> TransceiveResult:
+        """
+        位级数据交换（InCommunicateThru + bit framing）。
         """
         self.trace.protocol(tx=data)
 
@@ -268,6 +385,7 @@ class PN532_HSU(CardReader):
             self.trace.debug(f"{'LAST_TX_BITS':<12}: {last_tx_bits}")
 
         # 0x42 (InCommunicateThru)
+        self._set_crc(tx_crc, rx_crc)
         full_cmd = b'\x42' + data
         res = self._req(full_cmd)
 
@@ -287,20 +405,10 @@ class PN532_HSU(CardReader):
         if res and len(res) >= 2 and res[0] == 0x43:
             if res[1] == 0x00:
                 self.trace.protocol(rx=res[2:])
-                return res[2:]
+                return TransceiveResult(data=res[2:], rx_bits=self.last_rx_bits)
             else:
                 err_msg = self.PN532_ERRORS.get(res[1], "未知错误")
-                self.trace.warning(f"InCommunicateThru 返回错误状态: 0x{res[1]:02X} ({err_msg})")
-                self.trace.protocol(rx=res[2:])
-                return res[2:]
-        else:
-            self.trace.warning(f"InCommunicateThru 未返回完整帧")
-        return None
+                self.trace.warning(f"InCommunicateThru 返回错误: 0x{res[1]:02X} ({err_msg})")
+                return TransceiveResult(data=res[2:] if len(res) > 2 else None, rx_bits=self.last_rx_bits)
 
-    def disconnect(self):
-        try:
-            self._req(b'\x52\x00')
-        except Exception as e:
-            self.trace.error(f"下发结束指令失败: {e}")
-        finally:
-            self.transport.close()
+        return TransceiveResult(data=None, rx_bits=0)

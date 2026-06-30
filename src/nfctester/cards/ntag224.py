@@ -29,7 +29,8 @@ class NTAG224(Type2Tag):
         发送 0x60 指令，获取 8 字节版本信息
         """
         cmd = bytes([self.CMD_GET_VERSION])
-        return self.transceive(cmd)
+        res = self.transceive(cmd)
+        return res.data
 
     def write_key(self, key: bytes):
         """
@@ -44,11 +45,7 @@ class NTAG224(Type2Tag):
         for i in range(4):
             page_addr = self.KEY_ADDR + i
             chunk = reversed_key[i*4 : (i+1)*4]
-            # print(f"write 0x{page_addr:02X} : {chunk.hex()}")
             self.write_page(page_addr, chunk)
-        
-        # rd_chunk = self.read_page(self.KEY_ADDR)
-        # print(f"read {self.KEY_ADDR} : {rd_chunk.hex()}")
 
     def auth(self, password: bytes):
         """
@@ -70,14 +67,14 @@ class NTAG224(Type2Tag):
         cmd = bytes([self.CMD_PWD_AUTH_A, 0x00])
         res = self.transceive(cmd)
 
-        if not res:
+        if not res.data:
             raise PermissionError("Auth Step 1 failed: No response from tag")
-        if res[0] != self.CMD_PWD_AUTH_A_RES:
-            raise PermissionError(f"Auth Step 1 failed: Expected first byte 0x{self.CMD_PWD_AUTH_A_RES:02X}, got 0x{res[0]:02X} (response: {res.hex()})")
-        if len(res) != 17:
-            raise PermissionError(f"Auth Step 1 failed: Expected 17 bytes (1 header + 16 ek(RndB)), got {len(res)} bytes (response: {res.hex()})")
+        if res.data[0] != self.CMD_PWD_AUTH_A_RES:
+            raise PermissionError(f"Auth Step 1 failed: Expected first byte 0x{self.CMD_PWD_AUTH_A_RES:02X}, got 0x{res.data[0]:02X} (response: {res.data.hex()})")
+        if len(res.data) != 17:
+            raise PermissionError(f"Auth Step 1 failed: Expected 17 bytes (1 header + 16 ek(RndB)), got {len(res.data)} bytes (response: {res.data.hex()})")
 
-        ek_rndb = res[1:]
+        ek_rndb = res.data[1:]
         trace.debug(f"{'Received ek(RndB)':<25}: {ek_rndb.hex(' ').upper()}")
 
         # 2. 解密 RndB 并生成 RndA
@@ -108,14 +105,14 @@ class NTAG224(Type2Tag):
         cmd = bytes([self.CMD_PWD_AUTH_B]) + ek1 + ek2
         res = self.transceive(cmd)
 
-        if not res:
+        if not res.data:
             raise PermissionError("Auth Step 2 failed: No response from tag")
-        if res[0] != self.CMD_PWD_AUTH_B_RES:
-            raise PermissionError(f"Auth Step 2 failed: Expected first byte 0x{self.CMD_PWD_AUTH_B_RES:02X}, got 0x{res[0]:02X} (response: {res.hex()})")
-        if len(res) != 17:
-            raise PermissionError(f"Auth Step 2 failed: Expected 17 bytes (1 header + 16 ek(RndA')), got {len(res)} bytes (response: {res.hex()})")
+        if res.data[0] != self.CMD_PWD_AUTH_B_RES:
+            raise PermissionError(f"Auth Step 2 failed: Expected first byte 0x{self.CMD_PWD_AUTH_B_RES:02X}, got 0x{res.data[0]:02X} (response: {res.data.hex()})")
+        if len(res.data) != 17:
+            raise PermissionError(f"Auth Step 2 failed: Expected 17 bytes (1 header + 16 ek(RndA')), got {len(res.data)} bytes (response: {res.data.hex()})")
 
-        ek_rnda_prime = res[1:]
+        ek_rnda_prime = res.data[1:]
         trace.debug(f"{'Received ek(RndA\')':<25}: {ek_rnda_prime.hex(' ').upper()}")
 
         # 5. 解密并验证 RndA'

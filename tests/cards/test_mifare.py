@@ -4,8 +4,8 @@ from nfctester.cards import MifareClassicCard
 @pytest.fixture
 def card(card_reader):
     """获取 MifareClassicCard 实例的 fixture"""
-    tag = card_reader.find()
-    assert tag is not None, "未找到卡片"
+    card_info = card_reader.active()
+    assert card_info is not None, "未找到卡片"
     return MifareClassicCard(card_reader)
 
 def create_value_block(value: int, addr: int) -> bytes:
@@ -85,4 +85,3 @@ def test_mifare_value_ops(card):
     assert card.transfer_block(block_addr) is True
     res = card.read_block(block_addr)
     assert int.from_bytes(res[0:4], 'little') == 1300
-

@@ -52,30 +52,45 @@ from nfctester.registry import CardReaderRegistry, CardRegistry
 
 # 1. 一行创建读卡器（自动创建 transport 并注入）
 reader = CardReaderRegistry.create("pn532", transport="serial", port="COM20")
-reader.connect()
+reader.open()
 
-# 2. 通过 CardRegistry 动态创建卡片实例
-tag = reader.find()
-if tag:
+# 2. 寻卡并创建卡片实例
+card_info = reader.active()
+if card_info:
     # 假设已知卡片类型为 mifare_classic
     card = CardRegistry.create("mifare_classic", reader=reader)
-    print(f"UID: {card.uid.hex(' ').upper()}")
+    print(f"UID: {card_info.uid.hex(' ').upper()}")
 
-reader.disconnect()
+reader.close()
 ```
 
-### Session：上下文管理器（自动 connect/disconnect）
+### Session：上下文管理器（自动 open/close）
 
 ```python
 from nfctester.registry import session
 
 # 自动管理 reader 的生命周期，类似 C# 的 using
 with session("pn532", transport="serial", port="COM20") as s:
-    tag = s.find()
-    if tag:
-        s.set_crc(False, False)
-        s.transceive(b"\x26", last_tx_bits=7)
-# 退出时自动 disconnect
+    card_info = s.active()
+    if card_info:
+        res = s.transceive_bits(b"\x26", last_tx_bits=7, tx_crc=False, rx_crc=False)
+        if res.data:
+            print(f"ATQA: {res.data.hex(' ').upper()}")
+# 退出时自动 close
+```
+
+### Mifare Classic 认证与读写
+
+```python
+with session("pn532", transport="serial", port="COM20") as s:
+    card_info = s.active()
+    if card_info:
+        # 使用 reader 级别的硬件认证，uid 来自 active() 返回的 CardInfo
+        if s.mf_auth(block=4, key_type=0x60, key=b'\xff\xff\xff\xff\xff\xff', uid=card_info.uid):
+            # 认证后 transceive 自动走加密通道
+            res = s.transceive(b'\x30\x04')  # READ block 4
+            if res.data:
+                print(f"Block 4: {res.data.hex(' ').upper()}")
 ```
 
 ## 🔌 自定义读卡器
@@ -121,55 +136,62 @@ class TCPTransport(Transport):
 
 ```python
 from nfctester.registry import CardReaderRegistry
-from nfctester.drivers import CardReader
+from nfctester.drivers import CardReader, CardInfo, TransceiveResult
 
 @CardReaderRegistry.register("acr122u")
 class ACR122UReader(CardReader):
     def __init__(self, transport):
         self.transport = transport
 
-    def connect(self):
+    def open(self):
         self.transport.write(b"\xFF\x00\x00\x00\x00")
         self.transport.flush_input()
+
+    def close(self):
+        self.transport.close()
 
     def get_version(self) -> bytes:
         self.transport.write(b"\xFF\x00\x48\x00\x00")
         return self.transport.read(10)
 
-    def set_crc(self, tx_enabled: bool, rx_enabled: bool):
-        pass
-
-    def set_rf_field(self, enabled: bool):
-        pass
-
-    def get_rf_field(self) -> bool:
+    @property
+    def rf_field(self) -> bool:
         return True
 
-    def find(self) -> dict:
+    @rf_field.setter
+    def rf_field(self, enabled: bool):
+        pass
+
+    def active(self) -> CardInfo | None:
         cmd = b"\xD4\x4A\x01\x00"
         frame = bytes([0xFF, 0x00, 0x00, 0x00, len(cmd)]) + cmd
         self.transport.write(frame)
         res = self.transport.read(20)
         if res and len(res) >= 10:
-            return {"uid": res[6:10], "atq": res[2:4], "sak": res[4]}
+            return CardInfo(uid=res[6:10], atq=res[2:4], sak=res[4])
         return None
 
-    def select(self) -> dict:
-        return self.find()
+    def wakeup(self) -> CardInfo | None:
+        return self.active()
 
-    def deselect(self) -> bool:
+    def halt(self) -> bool:
         return True
 
-    def exchange(self, data: bytes) -> bytes:
+    @property
+    def mf_crypto(self) -> bool:
+        return False
+
+    def mf_auth(self, block: int, key_type: int, key: bytes, uid: bytes) -> bool:
+        return False
+
+    def transceive(self, data: bytes, tx_crc: bool = True, rx_crc: bool = True) -> TransceiveResult:
         frame = bytes([0xFF, 0x00, 0x00, 0x00, len(data)]) + data
         self.transport.write(frame)
-        return self.transport.read(262)
+        res = self.transport.read(262)
+        return TransceiveResult(data=res, rx_bits=0)
 
-    def transceive(self, data: bytes, last_tx_bits: int = 0) -> bytes:
-        return self.exchange(data)
-
-    def disconnect(self):
-        self.transport.close()
+    def transceive_bits(self, data: bytes, last_tx_bits: int = 0, tx_crc: bool = True, rx_crc: bool = True) -> TransceiveResult:
+        return self.transceive(data, tx_crc, rx_crc)
 ```
 
 ### 3. 使用你的自定义读卡器
@@ -179,9 +201,9 @@ import my_reader  # import 即自动注册
 from nfctester.registry import CardReaderRegistry
 
 reader = CardReaderRegistry.create("acr122u", transport="serial", port="COM3")
-reader.connect()
-tag = reader.find()
-reader.disconnect()
+reader.open()
+card_info = reader.active()
+reader.close()
 ```
 
 ### 4. 自定义卡片注册 (CardRegistry)

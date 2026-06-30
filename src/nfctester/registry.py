@@ -124,8 +124,8 @@ class Session:
 
     用法:
         with Session("pn532", transport="serial") as s:
-            tag = s.find()
-            data = s.exchange(b"\\x30\\x00")
+            tag = s.active()
+            data = s.transceive(b"\\x30\\x00")
 
     也可以传入已有的 reader:
         with Session(reader=my_reader) as s:
@@ -150,12 +150,12 @@ class Session:
             self._reader_instance = CardReaderRegistry.create(
                 self._reader_type, **self._kwargs
             )
-        self._reader_instance.connect()
+        self._reader_instance.open()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         try:
-            self._reader_instance.disconnect()
+            self._reader_instance.close()
         except Exception:
             pass
         return False
@@ -176,7 +176,7 @@ def session(reader_type: str | None = None, reader=None, **kwargs):
 
     用法:
         with session("pn532", transport="serial") as s:
-            tag = s.find()
+            tag = s.active()
     """
     s = Session(reader_type=reader_type, reader=reader, **kwargs)
     with s:
