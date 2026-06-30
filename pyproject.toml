@@ -32,6 +32,7 @@ pn532 = "nfctester.drivers.pn532_hsu:PN532_HSU"
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+addopts = "-m 'not hil'"
 
 [tool.uv]
 package = true

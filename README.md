@@ -248,11 +248,18 @@ print("Cards:", CardRegistry.list())
 ## 🧪 运行测试
 
 ```bash
-# 运行所有测试
+# 运行单元测试（默认，无需硬件）
 uv run pytest
 
-# 运行特定模块测试（如加密模块）
-uv run pytest tests/crypto/
+# 运行硬件在环测试（需连接读卡器）
+uv run pytest -m hil --port COM4 --reader clrc663
+
+# 按卡片类型过滤 HIL 测试
+uv run pytest -m "hil and mifare" --port COM4
+uv run pytest -m "hil and ntag224" --port COM20 --reader pn532
+
+# 运行全部测试（单元 + HIL）
+uv run pytest -m ""
 ```
 
 ## 📄 开源协议

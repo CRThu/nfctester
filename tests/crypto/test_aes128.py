@@ -1,6 +1,7 @@
 import pytest
 from nfctester.crypto import AES128Crypto
 
+@pytest.mark.unit
 def test_aes128_ecb_vectors():
     """
     使用用户提供的数据集验证 AES-128 ECB 加解密

@@ -8,6 +8,7 @@ def t2t_card(card_reader):
     assert card_info is not None, "未找到卡片，请确保 NFC 标签已放置在读卡器上"
     return Type2Tag(card_reader)
 
+@pytest.mark.hil
 @pytest.mark.t2t
 def test_t2t_read_write_tag(t2t_card):
     """测试 Type 2 Tag 基础读写流程"""
@@ -33,6 +34,7 @@ def test_t2t_read_write_tag(t2t_card):
     assert t2t_card.read_page(page_addr)[0:4] == original_data
 
 
+@pytest.mark.hil
 @pytest.mark.t2t
 def test_t2t_ndef_operations(t2t_card):
     """

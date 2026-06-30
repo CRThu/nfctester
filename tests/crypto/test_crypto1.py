@@ -1,5 +1,7 @@
+import pytest
 from nfctester.crypto import MifareCrypto1
 
+@pytest.mark.unit
 def test_crypto1_encryption_decryption():
     """
     测试 MifareCrypto1 的加密和解密逻辑是否与已知结果一致

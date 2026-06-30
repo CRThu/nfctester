@@ -4,6 +4,7 @@ from nfctester.cards import NTAG224
 from nfctester.drivers.card_reader import TransceiveResult
 
 # --- Mock Tests ---
+@pytest.mark.unit
 def test_ntag224_auth_mock():
     """
     使用 NTAG224 手册 AES 认证示例表格中的测试向量验证互认证逻辑。
@@ -63,6 +64,7 @@ def card(card_reader):
     assert card_info is not None, "未发现卡片，请确认已放置在读卡器上"
     return NTAG224(card_reader)
 
+@pytest.mark.hil
 @pytest.mark.ntag224
 @pytest.mark.dependency(name="ntag224_write_key")
 def test_ntag224_write_key(card):
@@ -70,6 +72,7 @@ def test_ntag224_write_key(card):
     key = bytes.fromhex("000102030405060708090A0B0C0D0E0F")
     card.write_key(key)
 
+@pytest.mark.hil
 @pytest.mark.ntag224
 @pytest.mark.dependency(name="ntag224_auth", depends=["ntag224_write_key"])
 def test_ntag224_auth(card):
@@ -77,6 +80,7 @@ def test_ntag224_auth(card):
     key = bytes.fromhex("000102030405060708090A0B0C0D0E0F")
     card.auth(key)
 
+@pytest.mark.hil
 @pytest.mark.ntag224
 @pytest.mark.dependency(depends=["ntag224_auth"])
 def test_ntag224_read_protected_page(card):

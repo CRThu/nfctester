@@ -1,7 +1,9 @@
 import os
 import pytest
+from unittest.mock import MagicMock
 from nfctester.trace import trace
 from nfctester.registry import CardReaderRegistry
+from nfctester.drivers.card_reader import CardInfo, TransceiveResult
 
 def pytest_addoption(parser):
     group = parser.getgroup("nfctester-trace", "CRFT Trace Logging Options")
@@ -12,8 +14,11 @@ def pytest_addoption(parser):
     group.addoption("--reader", default=None, help="Reader type (default: NFCTESTER_READER env or clrc663)")
 
 def pytest_configure(config):
+    config.addinivalue_line("markers", "unit: pure software unit tests, no hardware required")
+    config.addinivalue_line("markers", "hil: hardware-in-the-loop tests, requires connected reader")
     config.addinivalue_line("markers", "mifare: mark tests that require MIFARE hardware")
     config.addinivalue_line("markers", "t2t: mark tests that require Type 2 Tag hardware")
+    config.addinivalue_line("markers", "ntag21x: mark tests that require NTAG21x hardware")
     config.addinivalue_line("markers", "ntag224: mark tests that require NTAG224 card hardware")
 
     if config.getoption("--trace-driver"):
@@ -41,3 +46,13 @@ def card_reader(request):
     yield reader
 
     reader.close()
+
+@pytest.fixture
+def mock_reader():
+    """提供预配置的 mock CardReader，用于单元测试。"""
+    reader = MagicMock()
+    reader.active.return_value = CardInfo(uid=b'\x01\x02\x03\x04', atq=b'\x00\x44', sak=0x08)
+    reader.mf_auth.return_value = True
+    type(reader).mf_crypto = MagicMock(return_value=False)
+    reader.transceive.return_value = TransceiveResult(data=b'\x00', rx_bits=0)
+    return reader

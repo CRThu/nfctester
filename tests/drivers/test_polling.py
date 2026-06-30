@@ -1,6 +1,7 @@
 import pytest
 from loguru import logger
 
+@pytest.mark.hil
 def test_poll_card(card_reader):
     """测试寻卡功能"""
     card_info = card_reader.active()

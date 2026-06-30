@@ -1,6 +1,7 @@
 import pytest
 from nfctester.utils import crc_a
 
+@pytest.mark.unit
 def test_crc_a_data_vector():
     """
     测试 CRC-A 数据向量校验。

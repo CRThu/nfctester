@@ -130,7 +130,17 @@
         *   `tests/cards/`: 卡片协议层测试。
         *   `tests/drivers/`: 硬件驱动层测试。
         *   `tests/utils/`: 通用工具层测试（如 CRC 校验）。
-    *   执行特定模块测试: `uv run pytest tests/crypto/`
+    *   **测试分层**: 通过 pytest marker 区分单元测试和硬件测试：
+        *   `@pytest.mark.unit`: 纯软件单元测试，无需硬件，mock reader。
+        *   `@pytest.mark.hil`: 硬件在环测试，需要连接读卡器。
+        *   细粒度 marker: `mifare`、`t2t`、`ntag21x`、`ntag224`，用于按卡片类型过滤 HIL 测试。
+    *   **执行命令**:
+        *   `uv run pytest` — 只跑单元测试（默认，`addopts = "-m 'not hil'"`）
+        *   `uv run pytest -m hil --port COM4` — 跑全部 HIL 测试
+        *   `uv run pytest -m "hil and mifare" --port COM4` — 只跑 Mifare HIL
+        *   `uv run pytest -m "hil and (ntag21x or ntag224)" --port COM4` — 只跑 NTAG HIL
+        *   `uv run pytest -m ""` — 跑全部（单元 + HIL）
+    *   **Mock 测试**: 卡片协议层测试通过 mock `reader.transceive()` 返回已知响应向量，验证命令字节生成。共享 fixture 在 `tests/conftest.py` 的 `mock_reader` 中提供。
 *   **配置**: 硬件参数（如 COM 端口）应通过环境变量 `NFCTESTER_PORT` 或命令行参数 `--port` / `--reader` 读取，严禁硬编码在核心库中。
 *   **代码规范**: 
     *   方法和类必须有 Docstring。

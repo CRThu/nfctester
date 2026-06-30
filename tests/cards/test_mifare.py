@@ -16,6 +16,7 @@ def create_value_block(value: int, addr: int) -> bytes:
     a_inv_byte = (addr ^ 0xFF) & 0xFF
     return v_bytes + v_inv_bytes + v_bytes + bytes([a_byte, a_inv_byte, a_byte, a_inv_byte])
 
+@pytest.mark.hil
 @pytest.mark.mifare
 @pytest.mark.dependency(name="mifare_auth")
 def test_mifare_auth(card):
@@ -25,6 +26,7 @@ def test_mifare_auth(card):
     assert card.authenticate(0x04, default_key, key_type=0x60) is True
     assert card.authenticate(0x04, default_key, key_type=0x61) is True
 
+@pytest.mark.hil
 @pytest.mark.mifare
 @pytest.mark.dependency(depends=["mifare_auth"])
 def test_mifare_read_write(card):
@@ -46,6 +48,7 @@ def test_mifare_read_write(card):
     # 恢复原始数据
     assert card.write_block(block_addr, original_data) is True
 
+@pytest.mark.hil
 @pytest.mark.mifare
 @pytest.mark.dependency(name="mifare_value_init", depends=["mifare_auth"])
 def test_mifare_value_init(card):
@@ -59,6 +62,7 @@ def test_mifare_value_init(card):
     vb = create_value_block(initial_val, block_addr)
     assert card.write_block(block_addr, vb) is True
 
+@pytest.mark.hil
 @pytest.mark.mifare
 @pytest.mark.dependency(depends=["mifare_value_init"])
 def test_mifare_value_ops(card):

@@ -9,6 +9,8 @@ def ntag(card_reader):
     assert card_info is not None, "未找到卡片，请确保 NTAG21x 标签已放置在读卡器上"
     return NTAG21x(card_reader)
 
+@pytest.mark.hil
+@pytest.mark.ntag21x
 def test_ntag_get_version(ntag):
     """
     测试获取 NTAG21x 版本信息
@@ -24,6 +26,8 @@ def test_ntag_get_version(ntag):
     trace.info(f"[GET_VERSION]: {version.hex().upper()}")
 
 
+@pytest.mark.hil
+@pytest.mark.ntag21x
 def test_ntag_auth_and_protection(ntag):
     """
     测试 NTAG21x 认证及页面保护逻辑
