@@ -14,19 +14,19 @@ class Type2Tag(BaseTag):
     def __init__(self, reader):
         super().__init__(reader)
 
-    def read_page(self, page_addr: int) -> bytes:
+    def read_page(self, page_addr: int) -> list[int]:
         """
         读取页数据
         T2T READ 指令会返回从 page_addr 开始的 16 字节 (即 4 个页的数据)
         :param page_addr: 页地址
         """
-        cmd = bytes([self.CMD_READ, page_addr])
+        cmd = [self.CMD_READ, page_addr]
         res = self.transceive(cmd)
         if not res.data:
             raise RuntimeError(f"Type 2 Tag read_page(0x{page_addr:02X}) failed: No response from card")
         return res.data
 
-    def write_page(self, page_addr: int, data: bytes):
+    def write_page(self, page_addr: int, data: list[int]):
         """
         写入页数据 (T2T 规范每次写入 4 字节)
         :param page_addr: 页地址
@@ -35,13 +35,13 @@ class Type2Tag(BaseTag):
         if len(data) != 4:
             raise ValueError("Type 2 Tag write_page requires exactly 4 bytes of data")
 
-        cmd = bytes([self.CMD_WRITE, page_addr]) + data
+        cmd = [self.CMD_WRITE, page_addr] + list(data)
         res = self.transceive(cmd, tx_crc=True, rx_crc=False)
 
         if not res.data:
             raise RuntimeError(f"Type 2 Tag write_page(0x{page_addr:02X}) failed: No response from card")
-        if res.data != b'\x0A':
-            raise RuntimeError(f"Type 2 Tag write_page(0x{page_addr:02X}) failed: NAK(0x{res.data.hex(' ').upper()}) from card")
+        if res.data != [0x0A]:
+            raise RuntimeError(f"Type 2 Tag write_page(0x{page_addr:02X}) failed: NAK(0x{bytes(res.data).hex(' ').upper()}) from card")
         
     def read_ndef(self) -> dict:
         """
@@ -85,7 +85,7 @@ class Type2Tag(BaseTag):
                 
             # 识别 NDEF TLV (0x03)
             if t == 0x03:
-                ndef = bytes(data[ptr : ptr + l])
+                ndef = list(data[ptr : ptr + l])
                 break
                 
             ptr += l

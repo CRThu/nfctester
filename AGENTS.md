@@ -19,30 +19,30 @@
     *   `CLRC663`（注册为 `"clrc663"`）: CLRC663 UART 协议驱动，通过串口寄存器读写和 FIFO 命令机制与芯片通信。支持 ISO/IEC 14443A 协议，可无缝替换 PN532 读卡器。
 *   **CardReader ABC 接口**（`card_reader.py`）:
     *   **数据结构**:
-        *   `CardInfo`: 寻卡结果数据类，包含 `uid` (bytes)、`atq` (bytes)、`sak` (int)。
-        *   `TransceiveResult`: 收发结果数据类，包含 `data` (bytes | None) 和 `rx_bits` (int)（最后字节有效位数，0 = 整字节有效）。
+        *   `CardInfo`: 寻卡结果数据类，包含 `uid` (list[int])、`atq` (list[int])、`sak` (int)。
+        *   `TransceiveBits`: 收发结果数据类，包含 `data` (list[int] | None) 和 `bits` (int)（最后字节有效位数，0 = 整字节有效）。
     *   **生命周期**: `open()` 初始化硬件，`close()` 释放资源。
     *   **RF 控制**: `rf_field` 属性（getter/setter），开关物理天线驱动。
-    *   **寻卡**: `active()` (REQA → anticoll → SELECT)，`wakeup()` (WUPA → anticoll → SELECT，含 HALT 状态)，`halt()` (HLTA 去选)。
+    *   **寻卡**: `active()` (REQA → anticoll → SELECT)。
     *   **Mifare**: `mf_crypto` 属性（读取加密引擎状态），`mf_auth(block, key_type, key, uid)`（执行 Mifare Classic 认证，成功后 `mf_crypto` 变为 True，后续 `transceive` 自动加密）。
-    *   **数据交换**: `transceive(data, tx_crc, rx_crc)` 返回 `TransceiveResult`；`transceive_bits(data, last_tx_bits, tx_crc, rx_crc)` 支持位级发送。
-    *   **CRC 控制**: `set_crc()` 已移除公开接口，CRC 通过 `transceive`/`transceive_bits` 的 `tx_crc`/`rx_crc` 参数控制。驱动内部仍使用 `_set_crc()` 私有方法。
-    *   **已移除**: `exchange()` 方法（合并入 `transceive`），`set_rf_field()`/`get_rf_field()` 方法（改为 `rf_field` 属性）。
+    *   **数据交换**: `transceive(data, last_tx_bits=0, tx_crc=True, rx_crc=True)` 返回 `TransceiveBits`（含 `.data` 和 `.bits` 属性），支持位级发送。
+    *   **CRC 控制**: `set_crc()` 已移除公开接口，CRC 通过 `transceive` 的 `tx_crc`/`rx_crc` 参数控制。驱动内部仍使用 `_set_crc()` 私有方法。
+    *   **已移除**: `exchange()` 方法（合并入 `transceive`），`set_rf_field()`/`get_rf_field()` 方法（改为 `rf_field` 属性），`wakeup()`/`halt()` 方法（nfcscript 通过 raw transceive 实现）。
 *   **CLRC663 驱动特点**:
     *   **UART 协议**: 使用 7 位地址 + R/W 位的寄存器读写协议。写操作发送 2 字节（地址 + 数据），读操作发送 1 字节（地址）并接收 1 字节（数据）。写操作后校验芯片回传的地址字节，不匹配时输出警告。
     *   **命令执行**: 通过写入 Command 寄存器启动命令，使用 FIFO 缓冲区交换数据，通过 IRQ0 寄存器轮询命令完成状态。
-    *   **寻卡流程**: 手动实现 ISO 14443-A REQA → 抗冲突 → SELECT 序列，通过 TxDataNum 寄存器控制 7 位短帧（REQA）和标准帧（抗冲突/选择）。`wakeup()` 方法发送 WUPA 唤醒 HALT 状态的卡片。
-    *   **Transceive 机制**: 底层 `_do_transceive()` 方法遵循 idle → flush FIFO → 写数据 → 清 IRQ → 启动命令的固定序列，确保每次通信状态干净。返回 `TransceiveResult`。
+    *   **寻卡流程**: 手动实现 ISO 14443-A REQA → 抗冲突 → SELECT 序列，通过 TxDataNum 寄存器控制 7 位短帧（REQA）和标准帧（抗冲突/选择）。
+    *   **Transceive 机制**: 底层 `_do_transceive()` 方法遵循 idle → flush FIFO → 写数据 → 清 IRQ → 启动命令的固定序列，确保每次通信状态干净。返回 `TransceiveBits`。
     *   **Mifare 硬件认证**: 使用 CLRC663 的 MFAuthent 命令（CMD_AUTHENT 0x0E），需要将密钥写入 Key RAM、UID 写入 UID RAM，认证成功后 `_mf_crypto_active` 标志置 True。
     *   **错误解码**: Error 寄存器位通过 `CLRC663_ERRORS` 字典映射为可读描述，`transceive()` 错误日志包含具体错误类型（如协议错误、碰撞、CRC 错误等）。
 *   **PN532 驱动特点**:
     *   **寄存器辅助方法**: `_read_reg(address)` / `_write_reg(address, value)` / `_modify_reg(address, mask, value)`，用于直接操作 PN532 CIU 寄存器。
     *   **Mifare 硬件认证**: 使用 PN532 的 TgInitAsTarget 或 InDataExchange（指令 0x40），认证成功后 `_mf_crypto_active` 标志置 True，后续 `transceive` 自动切换到 InDataExchange。
 *   **位帧收发支持**（PN532 与 CLRC663 均支持）:
-    *   `transceive_bits(data, last_tx_bits=0, tx_crc=True, rx_crc=True)`: 在标准整字节发送基础上支持位帧发送，返回 `TransceiveResult`。
+    *   `transceive(data, last_tx_bits=0, tx_crc=True, rx_crc=True)`: 在标准整字节发送基础上支持位帧发送，返回 `TransceiveBits`。
         *   PN532: `last_tx_bits` 非 0 时，发送前写 `CIU_BitFraming`（`0x633D`）的 `TxLastBits[2:0]`，发送完成后清零复原。
         *   CLRC663: 通过修改 `TxDataNum`（`0x2E`）寄存器的 `TxLastBits[2:0]` 位域实现，发送完成后复原。
-    *   `TransceiveResult.rx_bits`: 每次收发完成后自动更新为最后接收字节的有效位数（0 = 全字节有效）。
+    *   `TransceiveBits.bits`: 直接在 `transceive` 返回值中携带最后接收字节的有效位数（0 = 全字节有效）。
         *   PN532: 读取 `CIU_Control`（`0x633C`）的 `RxLastBits[2:0]`。
         *   CLRC663: 读取 `RxBitCtrl`（`0x0C`）的 `RxLastBits[2:0]`。
 
@@ -62,7 +62,7 @@
 *   **职责**: 实现各种 RFID 卡片协议逻辑（如 ISO14443A, Mifare Classic）。
 *   **核心类**: `BaseTag`, `BaseCard`, `MifareClassicCard`, `Type2Tag`。
 *   **逻辑**: 
-    *   **BaseTag**: 针对简单标签的基类，定义了通用的 `read_page` 和 `write_page` 接口。`transceive()` 透传到 reader 的 `transceive()` 并解包 `TransceiveResult.data`。
+    *   **BaseTag**: 针对简单标签的基类，定义了通用的 `read_page` 和 `write_page` 接口。`transceive()` 透传到 reader 的 `transceive()` 并解包 `TransceiveBits.data`。
     *   **BaseCard**: 针对加密智能卡的基类，包含 `authenticate` 和钱包操作等复杂功能。
     *   `MifareClassicCard`: 继承自 `BaseCard`，实现完整的 Mifare Classic 指令集。`authenticate()` 内部调用 `reader.mf_auth()` 执行硬件认证，UID 由卡片自身的 `active()` 获取后传入。
     *   `Type2Tag`: 继承自 `BaseTag`，实现 NFC Forum Type 2 Tag 标准指令集（如 NTAG 读写）。`write_page` 使用 `transceive(cmd, tx_crc=True, rx_crc=False)` 控制 CRC。整合了 NDEF 解析能力 (`get_ndef`)。

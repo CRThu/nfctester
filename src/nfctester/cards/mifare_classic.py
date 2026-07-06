@@ -24,7 +24,7 @@ class MifareClassicCard(BaseCard):
             raise RuntimeError("未发现卡片，请确认已放置在读卡器上")
         self.uid = info.uid
 
-    def authenticate(self, block_addr: int, key: bytes, key_type: int = 0x60) -> bool:
+    def authenticate(self, block_addr: int, key: list[int], key_type: int = 0x60) -> bool:
         """
         MIFARE Classic 认证
         :param block_addr: 块地址
@@ -44,7 +44,7 @@ class MifareClassicCard(BaseCard):
         """对块进行递增操作"""
         if not (0 <= value < (1 << 32)):
             raise ValueError("value must be a 32-bit unsigned integer")
-        cmd = bytes([self.CMD_INCREMENT, block_addr]) + value.to_bytes(4, "little")
+        cmd = [self.CMD_INCREMENT, block_addr] + list(value.to_bytes(4, "little"))
         res = self.reader.transceive(cmd)
         return res.data is not None
 
@@ -52,32 +52,32 @@ class MifareClassicCard(BaseCard):
         """对块进行递减操作"""
         if not (0 <= value < (1 << 32)):
             raise ValueError("value must be a 32-bit unsigned integer")
-        cmd = bytes([self.CMD_DECREMENT, block_addr]) + value.to_bytes(4, "little")
+        cmd = [self.CMD_DECREMENT, block_addr] + list(value.to_bytes(4, "little"))
         res = self.reader.transceive(cmd)
         return res.data is not None
 
     def restore_block(self, block_addr: int) -> bool:
         """恢复块的临时值"""
-        cmd = bytes([self.CMD_RESTORE, block_addr])
+        cmd = [self.CMD_RESTORE, block_addr]
         res = self.reader.transceive(cmd)
         return res.data is not None
 
     def transfer_block(self, block_addr: int) -> bool:
         """将临时值写回块"""
-        cmd = bytes([self.CMD_TRANSFER, block_addr])
+        cmd = [self.CMD_TRANSFER, block_addr]
         res = self.reader.transceive(cmd)
         return res.data is not None
 
-    def read_block(self, block_addr: int) -> bytes:
+    def read_block(self, block_addr: int) -> list[int]:
         """读取块数据"""
-        cmd = bytes([self.CMD_READ, block_addr])
+        cmd = [self.CMD_READ, block_addr]
         res = self.reader.transceive(cmd)
         return res.data
 
-    def write_block(self, block_addr: int, data: bytes) -> bool:
+    def write_block(self, block_addr: int, data: list[int]) -> bool:
         """写入块数据"""
         if len(data) != 16:
             raise ValueError("Data must be 16 bytes")
-        cmd = bytes([self.CMD_WRITE, block_addr]) + data
+        cmd = [self.CMD_WRITE, block_addr] + list(data)
         res = self.reader.transceive(cmd)
         return res.data is not None

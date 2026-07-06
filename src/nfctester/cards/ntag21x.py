@@ -14,15 +14,15 @@ class NTAG21x(Type2Tag):
     def __init__(self, reader):
         super().__init__(reader)
 
-    def get_version(self) -> bytes:
+    def get_version(self) -> list[int]:
         """
         发送 0x60 指令，获取 8 字节版本信息
         """
-        cmd = bytes([self.CMD_GET_VERSION])
+        cmd = [self.CMD_GET_VERSION]
         res = self.transceive(cmd)
         return res.data
 
-    def auth(self, password: bytes) -> bytes:
+    def auth(self, password: list[int]) -> list[int]:
         """
         发送 0x1B 指令进行密码认证
         认证流程说明：
@@ -40,7 +40,7 @@ class NTAG21x(Type2Tag):
             raise ValueError("NTAG21x password must be 4 bytes")
 
         # 1. 组装指令: 0x1B + 4字节密码
-        cmd = bytes([self.CMD_PWD_AUTH]) + password
+        cmd = [self.CMD_PWD_AUTH] + list(password)
 
         # 2. 发送指令
         # 注意：如果认证失败，芯片会返回 4-bit 的 NAK (0x0)，

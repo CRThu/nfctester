@@ -22,4 +22,4 @@ def test_poll_card(card_reader):
         card_type = "ISO14443-4 兼容卡"
 
     logger.success(f"发现卡片! 类型: {card_type}")
-    logger.info(f"UID: {uid.hex(' ').upper()} | SAK: 0x{sak:02X}")
+    logger.info(f"UID: {' '.join(f'{b:02X}' for b in uid)} | SAK: 0x{sak:02X}")

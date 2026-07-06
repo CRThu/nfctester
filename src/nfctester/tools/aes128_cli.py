@@ -11,8 +11,8 @@ def main():
     args = parser.parse_args()
     
     try:
-        data = bytes.fromhex(args.input)
-        key = bytes.fromhex(args.key)
+        data = list(bytes.fromhex(args.input))
+        key = list(bytes.fromhex(args.key))
         crypto = AES128Crypto()
         
         if args.mode == "encrypt":
@@ -20,7 +20,7 @@ def main():
         else:
             result = crypto.decrypt(data, key)
             
-        print(result.hex().upper())
+        print(bytes(result).hex().upper())
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)

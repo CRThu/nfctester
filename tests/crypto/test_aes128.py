@@ -31,13 +31,13 @@ def test_aes128_ecb_vectors():
     total = len(test_cases)
     
     for case in test_cases:
-        key = bytes.fromhex(case["key"].replace(' ', ''))
-        pt = bytes.fromhex(case["plaintext"].replace(' ', ''))
-        ct_expected = bytes.fromhex(case["ciphertext"].replace(' ', ''))
+        key = list(bytes.fromhex(case["key"].replace(' ', '')))
+        pt = list(bytes.fromhex(case["plaintext"].replace(' ', '')))
+        ct_expected = list(bytes.fromhex(case["ciphertext"].replace(' ', '')))
         
         # 1. 执行加密
         ct_actual = crypto.encrypt(pt, key)
-        result_hex = ct_actual.hex().upper()
+        result_hex = bytes(ct_actual).hex().upper()
         
         # 2. 校验
         if ct_actual == ct_expected:

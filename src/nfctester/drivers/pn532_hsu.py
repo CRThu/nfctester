@@ -1,5 +1,5 @@
 import time
-from .card_reader import CardReader, CardInfo, TransceiveResult
+from .card_reader import CardReader, CardInfo, TransceiveBits
 from nfctester.trace import trace
 from nfctester.registry import CardReaderRegistry
 
@@ -40,9 +40,6 @@ class PN532_HSU(CardReader):
         # 初始化传输层
         self.transport = transport
         self.trace = trace_mgr
-        # 最近一次 transceive 收到数据后 CIU_Control.RxLastBits[2:0] 的值
-        # 0 表示最后一个字节全部有效（即整字节），非 0 表示最后字节有效位数
-        self.last_rx_bits = 0
         self._mf_crypto_active = False
 
     # --- 私有辅助方法 (协议具体实现) ---
@@ -147,57 +144,6 @@ class PN532_HSU(CardReader):
         self._modify_reg(0x6302, 0x80, 0x80 if tx_enabled else 0x00)
         self._modify_reg(0x6303, 0x80, 0x80 if rx_enabled else 0x00)
 
-    def _do_anticollision_select(self, sel_cmd: int) -> tuple[bytes, int] | None:
-        """执行单级抗冲突 + SELECT 流程"""
-        # Anti-collision (无 CRC)
-        self._set_crc(False, False)
-        self._write_reg(0x633D, 0x07, 0x00)
-        cmd = bytes([sel_cmd, 0x20])
-        full_cmd = b'\x42' + cmd
-        res = self._req(full_cmd)
-        if res is None or len(res) < 2 or res[0] != 0x43 or res[1] != 0x00:
-            return None
-        anticoll = res[2:]
-        if len(anticoll) < 5:
-            return None
-
-        uid = anticoll[:4]
-        bcc = anticoll[4]
-        if bcc != (uid[0] ^ uid[1] ^ uid[2] ^ uid[3]):
-            self.trace.error("BCC check failed")
-            return None
-
-        # SELECT (带 CRC)
-        self._set_crc(True, True)
-        self._write_reg(0x633D, 0x07, 0x00)
-        cmd = bytes([sel_cmd, 0x70]) + uid + bytes([bcc])
-        full_cmd = b'\x42' + cmd
-        res = self._req(full_cmd)
-        if res is None or len(res) < 2 or res[0] != 0x43 or res[1] != 0x00:
-            return None
-        sak_data = res[2:]
-        if not sak_data:
-            return None
-
-        return (anticoll, sak_data[0])
-
-    def _do_anticollision_select_all(self) -> tuple[bytes, int] | None:
-        """执行完整抗冲突 + SELECT 流程，自动处理级联"""
-        full_uid = bytearray()
-        sak = 0
-        for sel_cmd in [0x93, 0x95, 0x97]:
-            result = self._do_anticollision_select(sel_cmd)
-            if result is None:
-                return None
-            anticoll, sak = result
-            is_cascade = (anticoll[0] == 0x88)
-            if is_cascade:
-                full_uid.extend(anticoll[1:4])
-            else:
-                full_uid.extend(anticoll[:4])
-                break
-        return (bytes(full_uid), sak)
-
     # --- CardReader 接口实现 ---
 
     def open(self):
@@ -235,8 +181,8 @@ class PN532_HSU(CardReader):
         finally:
             self.transport.close()
 
-    def get_version(self) -> bytes:
-        return self._req(b'\x02')
+    def get_version(self) -> list[int]:
+        return list(self._req(b'\x02'))
 
     # --- RF 控制 ---
 
@@ -272,29 +218,14 @@ class PN532_HSU(CardReader):
         if res and len(res) >= 2 and res[0] == 0x4B:
             nb_targets = res[1]
             if nb_targets > 0:
-                uid = res[7:7+res[6]]
-                atq = res[3:5]
+                uid = list(res[7:7+res[6]])
+                atq = list(res[3:5])
                 sak = res[5]
-                trace.debug(f"{'uid':<12}: {uid.hex(' ').upper()}")
-                trace.debug(f"{'atq':<12}: {atq.hex(' ').upper()}")
+                trace.debug(f"{'uid':<12}: {bytes(uid).hex(' ').upper()}")
+                trace.debug(f"{'atq':<12}: {bytes(atq).hex(' ').upper()}")
                 trace.debug(f"{'sak':<12}: {hex(sak)}")
                 return CardInfo(uid=uid, atq=atq, sak=sak)
         return None
-
-    def wakeup(self) -> CardInfo | None:
-        """WUPA → anticoll → SELECT"""
-        try:
-            self._req(b'\x52\x01')
-        except Exception:
-            pass
-        return self.active()
-
-    def halt(self) -> bool:
-        """HLTA"""
-        res = self._req(b'\x44\x01')
-        if res and len(res) >= 2 and res[0] == 0x45:
-            return res[1] == 0x00
-        return False
 
     # --- Mifare ---
 
@@ -302,12 +233,12 @@ class PN532_HSU(CardReader):
     def mf_crypto(self) -> bool:
         return self._mf_crypto_active
 
-    def mf_auth(self, block: int, key_type: int, key: bytes, uid: bytes) -> bool:
+    def mf_auth(self, block: int, key_type: int, key: list[int], uid: list[int]) -> bool:
         """
         Mifare Classic 认证（使用 PN532 硬件实现）。
         认证成功后 mf_crypto 变为 True。
         """
-        cmd = bytes([key_type, block]) + key + uid
+        cmd = bytes([key_type, block]) + bytes(key) + bytes(uid)
         self.trace.protocol(tx=cmd)
         full_cmd = b'\x40\x01' + cmd
         res = self._req(full_cmd)
@@ -324,91 +255,61 @@ class PN532_HSU(CardReader):
 
     # --- 数据交换 ---
 
-    def transceive(self, data: bytes, tx_crc: bool = True, rx_crc: bool = True) -> TransceiveResult:
+    def transceive(self, data: list[int], last_tx_bits: int = 0, tx_crc: bool = True, rx_crc: bool = True) -> TransceiveBits:
         """
-        与卡片进行数据交换。
+        与卡片进行数据交换（支持位级发送）。
         mf_crypto 为 True 时使用 InDataExchange（硬件自动加密），
         否则使用 InCommunicateThru（透传）。
         """
-        self.trace.protocol(tx=data)
+        raw = bytes(data)
+        self.trace.protocol(tx=raw)
 
         if self._mf_crypto_active:
             # InDataExchange: 自动处理 Mifare Crypto1 加密
             # 0x40 (InDataExchange), 0x01 (Target 1)
-            full_cmd = b'\x40\x01' + data
+            full_cmd = b'\x40\x01' + raw
             res = self._req(full_cmd)
             # 响应格式: 0x41 (Response), Status, [Data]
             if res and len(res) >= 2 and res[0] == 0x41:
                 if res[1] == 0x00:
                     self.trace.protocol(rx=res[2:])
-                    return TransceiveResult(data=res[2:], rx_bits=0)
+                    return TransceiveBits(data=list(res[2:]), bits=0)
                 else:
                     err_msg = self.PN532_ERRORS.get(res[1], "未知错误")
                     self.trace.warning(f"InDataExchange 返回错误: 0x{res[1]:02X} ({err_msg})")
-                    return TransceiveResult(data=None, rx_bits=0)
+            return TransceiveBits(data=None, bits=0)
         else:
             # InCommunicateThru: 透传模式
+            
+            # CIU_BitFraming (0x633D) bit[2:0] = TxLastBits
+            # 0 = 发送完整字节；非 0 = 最后字节仅发送指定位数
+            if last_tx_bits != 0:
+                self._modify_reg(0x633D, 0x07, last_tx_bits & 0x07)
+                self.trace.debug(f"{'LAST_TX_BITS':<12}: {last_tx_bits}")
+
             # 0x42 (InCommunicateThru)
             self._set_crc(tx_crc, rx_crc)
-            full_cmd = b'\x42' + data
+            full_cmd = b'\x42' + raw
             res = self._req(full_cmd)
 
+            # 发送后复原 TxLastBits = 0（整字节模式）
+            if last_tx_bits != 0:
+                self._modify_reg(0x633D, 0x07, 0x00)
+
             # 读取 CIU_Control (0x633C) bit[2:0] = RxLastBits
-            # 0 表示最后字节全部有效，非 0 表示最后字节有效位数
+            # 最近一次 transceive 收到数据后 RxLastBits[2:0] 的值
+            # 0 表示最后一个字节全部有效（即整字节），非 0 表示最后字节有效位数
             ciu_ctrl = self._read_reg(0x633C)
-            self.last_rx_bits = (ciu_ctrl & 0x07) if ciu_ctrl is not None else 0
+            last_bits = (ciu_ctrl & 0x07) if ciu_ctrl is not None else 0
 
-            if self.last_rx_bits != 0:
-                self.trace.debug(f"{'LAST_RX_BITS':<12}: {self.last_rx_bits}")
-
+            if last_bits != 0:
+                self.trace.debug(f"{'LAST_RX_BITS':<12}: {last_bits}")
+            # 响应格式: 0x43 (Response), Status, [Data]
             if res and len(res) >= 2 and res[0] == 0x43:
                 if res[1] == 0x00:
                     self.trace.protocol(rx=res[2:])
-                    return TransceiveResult(data=res[2:], rx_bits=self.last_rx_bits)
+                    return TransceiveBits(data=list(res[2:]), bits=last_bits)
                 else:
                     err_msg = self.PN532_ERRORS.get(res[1], "未知错误")
                     self.trace.warning(f"InCommunicateThru 返回错误: 0x{res[1]:02X} ({err_msg})")
-                    return TransceiveResult(data=res[2:] if len(res) > 2 else None, rx_bits=self.last_rx_bits)
-
-        return TransceiveResult(data=None, rx_bits=0)
-
-    def transceive_bits(self, data: bytes, last_tx_bits: int = 0, tx_crc: bool = True, rx_crc: bool = True) -> TransceiveResult:
-        """
-        位级数据交换（InCommunicateThru + bit framing）。
-        """
-        self.trace.protocol(tx=data)
-
-        # CIU_BitFraming (0x633D) bit[2:0] = TxLastBits
-        # 0 = 发送完整字节；非 0 = 最后字节仅发送指定位数
-        if last_tx_bits != 0:
-            self._modify_reg(0x633D, 0x07, last_tx_bits & 0x07)
-            self.trace.debug(f"{'LAST_TX_BITS':<12}: {last_tx_bits}")
-
-        # 0x42 (InCommunicateThru)
-        self._set_crc(tx_crc, rx_crc)
-        full_cmd = b'\x42' + data
-        res = self._req(full_cmd)
-
-        # 发送后复原 TxLastBits = 0（整字节模式）
-        if last_tx_bits != 0:
-            self._modify_reg(0x633D, 0x07, 0x00)
-
-        # 读取 CIU_Control (0x633C) bit[2:0] = RxLastBits
-        # 0 表示最后字节全部有效，非 0 表示最后字节有效位数
-        ciu_ctrl = self._read_reg(0x633C)
-        self.last_rx_bits = (ciu_ctrl & 0x07) if ciu_ctrl is not None else 0
-
-        if self.last_rx_bits != 0:
-            self.trace.debug(f"{'LAST_RX_BITS':<12}: {self.last_rx_bits}")
-
-        # 响应格式: 0x43 (Response), Status, [Data]
-        if res and len(res) >= 2 and res[0] == 0x43:
-            if res[1] == 0x00:
-                self.trace.protocol(rx=res[2:])
-                return TransceiveResult(data=res[2:], rx_bits=self.last_rx_bits)
-            else:
-                err_msg = self.PN532_ERRORS.get(res[1], "未知错误")
-                self.trace.warning(f"InCommunicateThru 返回错误: 0x{res[1]:02X} ({err_msg})")
-                return TransceiveResult(data=res[2:] if len(res) > 2 else None, rx_bits=self.last_rx_bits)
-
-        return TransceiveResult(data=None, rx_bits=0)
+                    return TransceiveBits(data=None, bits=last_bits)

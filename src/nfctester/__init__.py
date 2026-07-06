@@ -8,7 +8,7 @@ from .registry import (
     load_entry_points,
 )
 from .hardware.serial_transport import SerialTransport
-from .drivers.card_reader import CardInfo, TransceiveResult
+from .drivers.card_reader import CardInfo, TransceiveBits
 from .drivers.pn532_hsu import PN532_HSU
 from .drivers.clrc663 import CLRC663
 from .cards import MifareClassicCard, NTAG21x, NTAG224, Type2Tag
@@ -24,7 +24,7 @@ __all__ = [
     "session",
     "SerialTransport",
     "CardInfo",
-    "TransceiveResult",
+    "TransceiveBits",
     "PN532_HSU",
     "CLRC663",
     "MifareClassicCard",

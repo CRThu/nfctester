@@ -5,7 +5,7 @@ from nfctester.registry import CardReaderRegistry
 def run_atqa_poll_test():
     """
     PN532 Transceive 测试工具。
-    使用 transceive_bits 以 7-bit 格式发送 REQA (0x26) 或 WUPA (0x52)。
+    使用 transceive 以 7-bit 格式发送 REQA (0x26) 或 WUPA (0x52)。
     """
     # --- 追踪配置 ---
     trace.set_layer("PROTOCOL", True)  # 开启协议追踪
@@ -31,12 +31,12 @@ def run_atqa_poll_test():
             # time.sleep(0.5)
 
             # 核心策略：先尝试发送 REQA (0x26)，如果失败尝试 WUPA (0x52)
-            # 使用 transceive_bits 配合 7-bit 模式
+            # 使用 transceive 配合 7-bit 模式
             
             found = False
             try:
                 # 尝试寻卡
-                res = reader.transceive_bits(b'\x26', last_tx_bits=7, tx_crc=False, rx_crc=False)
+                res = reader.transceive([0x26], last_tx_bits=7, tx_crc=False, rx_crc=False)
 
                 if res.data:
                     trace.success(f"收到响应 (ATQA) [cmd 26]: {res.data.hex(' ').upper()}")

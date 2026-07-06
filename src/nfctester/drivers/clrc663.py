@@ -1,5 +1,5 @@
 import time
-from .card_reader import CardReader, CardInfo, TransceiveResult
+from .card_reader import CardReader, CardInfo, TransceiveBits
 from nfctester.trace import trace
 from nfctester.registry import CardReaderRegistry
 
@@ -58,7 +58,6 @@ class CLRC663(CardReader):
     def __init__(self, transport, trace_mgr=trace):
         self.transport = transport
         self.trace = trace_mgr
-        self.last_rx_bits = 0
         self._mf_crypto_active = False
 
     # --- UART 底层 ---
@@ -176,9 +175,9 @@ class CLRC663(CardReader):
         finally:
             self.transport.close()
 
-    def get_version(self) -> bytes:
+    def get_version(self) -> list[int]:
         ver = self._read_reg(self.REG_VERSION)
-        return bytes([ver]) if ver is not None else b''
+        return [ver] if ver is not None else []
 
     # --- RF 控制 ---
 
@@ -244,7 +243,7 @@ class CLRC663(CardReader):
 
         return (anticoll, sak_data[0])
 
-    def _do_anticollision_select_all(self) -> tuple[bytes, int] | None:
+    def _do_anticollision_select_all(self) -> tuple[list[int], int] | None:
         """
         执行完整抗冲突 + SELECT 流程，自动处理级联 (CL1→CL2→CL3)。
 
@@ -264,7 +263,7 @@ class CLRC663(CardReader):
             else:
                 full_uid.extend(anticoll[:4])
                 break
-        return (bytes(full_uid), sak)
+        return (list(full_uid), sak)
 
     def active(self) -> CardInfo | None:
         """ISO 14443-A 寻卡: REQA → Anti-collision → SELECT"""
@@ -285,38 +284,9 @@ class CLRC663(CardReader):
             if result is None:
                 return None
             uid, sak = result
-            return CardInfo(uid=uid, atq=atqa, sak=sak)
+            return CardInfo(uid=uid, atq=list(atqa), sak=sak)
         finally:
             self._write_reg(self.REG_COMMAND, self.CMD_IDLE)
-
-    def wakeup(self) -> CardInfo | None:
-        """WUPA → 寻卡 (重新选择卡片，包括 HALT 状态)"""
-        try:
-            # WUPA (7-bit short frame, 无 CRC)
-            self._set_crc(False, False)
-            self._write_reg(self.REG_TX_DATA_NUM, 0x0F)
-            self._start_command(self.CMD_TRANSCEIVE, bytes([0x52]), set_tx_num=False)
-            if not self._wait_irq(self.IRQ0_RX, 0.1):
-                self._write_reg(self.REG_COMMAND, self.CMD_IDLE)
-                self._flush_fifo()
-                return None
-            atqa = self._read_fifo(self._read_reg(self.REG_FIFO_LENGTH) or 0)
-            if len(atqa) < 2:
-                return None
-
-            result = self._do_anticollision_select_all()
-            if result is None:
-                return None
-            uid, sak = result
-            return CardInfo(uid=uid, atq=atqa, sak=sak)
-        finally:
-            self._write_reg(self.REG_COMMAND, self.CMD_IDLE)
-
-    def halt(self) -> bool:
-        """发送 HLTA 去选卡片"""
-        self._set_crc(True, True)
-        self._start_command(self.CMD_TRANSMIT, bytes([0x50, 0x00]))
-        return self._wait_irq(self.IRQ0_TX, 0.1)
 
     # --- Mifare ---
 
@@ -324,7 +294,7 @@ class CLRC663(CardReader):
     def mf_crypto(self) -> bool:
         return self._mf_crypto_active
 
-    def mf_auth(self, block: int, key_type: int, key: bytes, uid: bytes) -> bool:
+    def mf_auth(self, block: int, key_type: int, key: list[int], uid: list[int]) -> bool:
         """
         Mifare Classic 认证（使用 CLRC663 硬件 MFAuthent 命令）。
         认证成功后 mf_crypto 变为 True，后续 transceive 自动加密。
@@ -341,8 +311,8 @@ class CLRC663(CardReader):
             self._write_reg(key_ram_addr + i, b)
 
         # 写入 4 字节 UID 到 UID RAM
-        uid = uid[:4]
-        for i, b in enumerate(uid):
+        uid_4 = uid[:4]
+        for i, b in enumerate(uid_4):
             self._write_reg(self.REG_MF_AUTH_UID + i, b)
 
         # 写入块号
@@ -368,18 +338,10 @@ class CLRC663(CardReader):
 
     # --- 数据交换 ---
 
-    def transceive(self, data: bytes, tx_crc: bool = True, rx_crc: bool = True) -> TransceiveResult:
-        """数据交换（支持 CRC 控制）"""
-        self.trace.protocol(tx=data)
-
-        self._set_crc(tx_crc, rx_crc)
-        self._write_reg(self.REG_COMMAND, self.CMD_IDLE)
-        time.sleep(0.05)
-        return self._do_transceive(data)
-
-    def transceive_bits(self, data: bytes, last_tx_bits: int = 0, tx_crc: bool = True, rx_crc: bool = True) -> TransceiveResult:
-        """位级数据交换（支持 bit framing + CRC 控制）"""
-        self.trace.protocol(tx=data)
+    def transceive(self, data: list[int], last_tx_bits: int = 0, tx_crc: bool = True, rx_crc: bool = True) -> TransceiveBits:
+        """数据交换（支持位级发送 + CRC 控制）"""
+        raw = bytes(data)
+        self.trace.protocol(tx=raw)
 
         use_bit_framing = last_tx_bits not in (0, 8)
         if use_bit_framing:
@@ -388,14 +350,14 @@ class CLRC663(CardReader):
         self._set_crc(tx_crc, rx_crc)
         self._write_reg(self.REG_COMMAND, self.CMD_IDLE)
         time.sleep(0.05)
-        result = self._do_transceive(data)
+        result = self._do_transceive(raw)
 
         if use_bit_framing:
             self._modify_reg(self.REG_TX_DATA_NUM, 0x07, 0x00)
 
         return result
 
-    def _do_transceive(self, data: bytes) -> TransceiveResult:
+    def _do_transceive(self, data: bytes) -> TransceiveBits:
         """底层 Transceive 执行"""
         self._flush_fifo()
         self._write_reg(self.REG_IRQ0, 0x7F)
@@ -405,20 +367,21 @@ class CLRC663(CardReader):
         if not self._wait_irq(self.IRQ0_RX):
             self._write_reg(self.REG_COMMAND, self.CMD_IDLE)
             self._flush_fifo()
-            return TransceiveResult(data=None, rx_bits=0)
+            return TransceiveBits(data=None, bits=0)
 
         fifo_len = self._read_reg(self.REG_FIFO_LENGTH) or 0
         response = self._read_fifo(fifo_len) if fifo_len > 0 else b''
 
         self._write_reg(self.REG_COMMAND, self.CMD_IDLE)
 
+        # 读取 RxBitCtrl (0x0C) bit[2:0] = RxLastBits
+        # 0 表示最后一个字节全部有效（即整字节），非 0 表示最后字节有效位数
         rx_ctrl = self._read_reg(self.REG_RX_BIT_CTRL)
-        rx_bits = (rx_ctrl & 0x07) if rx_ctrl is not None else 0
-        self.last_rx_bits = 8 if rx_bits == 0 else rx_bits
+        last_bits = (rx_ctrl & 0x07) if rx_ctrl is not None else 0
 
         err = self._check_error()
         if err:
             self.trace.warning(f"CLRC663 transceive error: {err}")
 
         self.trace.protocol(rx=response)
-        return TransceiveResult(data=response, rx_bits=self.last_rx_bits)
+        return TransceiveBits(data=list(response), bits=last_bits)

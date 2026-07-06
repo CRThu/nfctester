@@ -6,7 +6,7 @@
 """
 from nfctester.registry import CardReaderRegistry
 from nfctester.drivers import CardReader
-from nfctester.drivers.card_reader import CardInfo, TransceiveResult
+from nfctester.drivers.card_reader import CardInfo, TransceiveBits
 
 
 @CardReaderRegistry.register("acr122u")
@@ -26,10 +26,10 @@ class ACR122UReader(CardReader):
     def close(self):
         self.transport.close()
 
-    def get_version(self) -> bytes:
+    def get_version(self) -> list[int]:
         # Get Firmware Version: FF 00 48 00 00
         self.transport.write(b"\xFF\x00\x48\x00\x00")
-        return self.transport.read(10)
+        return list(self.transport.read(10))
 
     @property
     def rf_field(self) -> bool:
@@ -47,31 +47,23 @@ class ACR122UReader(CardReader):
         self.transport.write(frame)
         res = self.transport.read(20)
         if res and len(res) >= 10:
-            uid = res[6:10]
+            uid = list(res[6:10])
             self._uid = uid
-            return CardInfo(uid=uid, atq=res[2:4], sak=res[4])
+            return CardInfo(uid=uid, atq=list(res[2:4]), sak=res[4])
         return None
-
-    def wakeup(self) -> CardInfo | None:
-        return self.active()
-
-    def halt(self) -> bool:
-        return True
 
     @property
     def mf_crypto(self) -> bool:
         return self._mf_crypto_active
 
-    def mf_auth(self, block: int, key_type: int, key: bytes, uid: bytes) -> bool:
+    def mf_auth(self, block: int, key_type: int, key: list[int], uid: list[int]) -> bool:
         self._mf_crypto_active = True
         return True
 
-    def transceive(self, data: bytes, tx_crc: bool = True, rx_crc: bool = True) -> TransceiveResult:
+    def transceive(self, data: list[int], last_tx_bits: int = 0, tx_crc: bool = True, rx_crc: bool = True) -> TransceiveBits:
         # APDU 透传
-        frame = bytes([0xFF, 0x00, 0x00, 0x00, len(data)]) + data
+        raw = bytes(data)
+        frame = bytes([0xFF, 0x00, 0x00, 0x00, len(raw)]) + raw
         self.transport.write(frame)
         res = self.transport.read(262)
-        return TransceiveResult(data=res, rx_bits=0)
-
-    def transceive_bits(self, data: bytes, last_tx_bits: int = 0, tx_crc: bool = True, rx_crc: bool = True) -> TransceiveResult:
-        return self.transceive(data, tx_crc=tx_crc, rx_crc=rx_crc)
+        return TransceiveBits(data=list(res) if res else None, bits=0)

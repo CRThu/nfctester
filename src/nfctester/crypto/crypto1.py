@@ -101,19 +101,19 @@ class MifareCrypto1(BaseCrypto):
             
             return ks_bit
 
-    def initialize(self, key: bytes):
+    def initialize(self, key: list[int]):
         """
         重新实例化加密状态
         :param key: 6 字节 Mifare 密钥
         """
-        self._state = self.State(key=key)
+        self._state = self.State(key=bytes(key))
 
-    def encrypt(self, indata: bytes, feedback: bool = True) -> bytes:
+    def encrypt(self, indata: list[int], feedback: bool = True) -> list[int]:
         """
         加密数据
-        :param indata: 输入原始数据 (bytes)
+        :param indata: 输入原始数据
         :param feedback: 是否启用反馈 (认证 Token 计算时通常为 False)
-        :return: 加密后的字节流 (bytes)
+        :return: 加密后的数据
         """
         if self._state is None:
             raise RuntimeError("MifareCrypto1 state not initialized. Call initialize() first.")
@@ -126,20 +126,19 @@ class MifareCrypto1(BaseCrypto):
                 # 1. 提取明文位并执行状态移位
                 p_bit = self._bit(p_byte, i)
                 ks_bit = self._state._shift(p_bit, feedback=feedback)
-                
                 # 2. 与流密钥异或得出密文位
                 c_bit = p_bit ^ ks_bit
                 c_byte |= (c_bit << i)
                 
             out.append(c_byte)
-        return bytes(out)
+        return list(out)
 
-    def decrypt(self, indata: bytes, feedback: bool = True) -> bytes:
+    def decrypt(self, indata: list[int], feedback: bool = True) -> list[int]:
         """
         解密数据
-        :param indata: 输入加密数据 (bytes)
+        :param indata: 输入加密数据
         :param feedback: 是否启用反馈 (解密通常需要反馈以保持同步)
-        :return: 解密后的原始字节流 (bytes)
+        :return: 解密后的原始数据
         """
         if self._state is None:
             raise RuntimeError("MifareCrypto1 state not initialized. Call initialize() first.")
@@ -150,14 +149,12 @@ class MifareCrypto1(BaseCrypto):
             for i in range(8):
                 # 1. 解密时先获取流密钥
                 ks_bit = self._state.get_filter_bit()
-                
                 # 2. 异或密文位得出明文位
                 c_bit = self._bit(c_byte, i)
                 p_bit = c_bit ^ ks_bit
                 p_byte |= (p_bit << i)
-                
                 # 3. 将明文位混入反馈状态中，保持状态机同步
                 self._state._shift(p_bit, feedback=feedback)
                 
             out.append(p_byte)
-        return bytes(out)
+        return list(out)

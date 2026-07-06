@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import MagicMock
 from nfctester.trace import trace
 from nfctester.registry import CardReaderRegistry
-from nfctester.drivers.card_reader import CardInfo, TransceiveResult
+from nfctester.drivers.card_reader import CardInfo, TransceiveBits
 
 def pytest_addoption(parser):
     group = parser.getgroup("nfctester-trace", "CRFT Trace Logging Options")
@@ -30,7 +30,7 @@ def pytest_configure(config):
     if trace_level:
         trace.set_level(trace_level)
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def card_reader(request):
     """提供一个初始化好的通用 CardReader 实例。
 
@@ -51,8 +51,8 @@ def card_reader(request):
 def mock_reader():
     """提供预配置的 mock CardReader，用于单元测试。"""
     reader = MagicMock()
-    reader.active.return_value = CardInfo(uid=b'\x01\x02\x03\x04', atq=b'\x00\x44', sak=0x08)
+    reader.active.return_value = CardInfo(uid=[0x01, 0x02, 0x03, 0x04], atq=[0x00, 0x44], sak=0x08)
     reader.mf_auth.return_value = True
     type(reader).mf_crypto = MagicMock(return_value=False)
-    reader.transceive.return_value = TransceiveResult(data=b'\x00', rx_bits=0)
+    reader.transceive.return_value = TransceiveBits(data=[0x00], bits=0)
     return reader

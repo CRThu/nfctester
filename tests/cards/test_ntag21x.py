@@ -23,7 +23,7 @@ def test_ntag_get_version(ntag):
     assert version[2] == 0x04
     assert version[7] == 0x03
     
-    trace.info(f"[GET_VERSION]: {version.hex().upper()}")
+    trace.info(f"[GET_VERSION]: {bytes(version).hex().upper()}")
 
 
 @pytest.mark.hil
@@ -56,7 +56,7 @@ def test_ntag_auth_and_protection(ntag):
     pack_addr = cfg_base + 3
     
     # 设置密码和保护范围
-    test_pwd = b'\x12\x34\x56\x78'
+    test_pwd = [0x12, 0x34, 0x56, 0x78]
     # pack = ntag.auth(test_pwd)
     try:
         # 写入新密码
@@ -64,19 +64,19 @@ def test_ntag_auth_and_protection(ntag):
 
         # 设置 AUTH0 = 0x04 (从第 4 页开始受保护)
         # MIRROR(0x04) RFUI(0x00) MIRROR_PAGE(0x00) AUTH0(0xFF->0x04)
-        ntag.write_page(auth0_addr, b'\x04\x00\x00\x04')
-        # ntag.write_page(auth0_addr, b'\x04\x00\x00\xFF') 
-        
+        ntag.write_page(auth0_addr, [0x04, 0x00, 0x00, 0x04])
+        # ntag.write_page(auth0_addr, [0x04, 0x00, 0x00, 0xFF])
+
         data = ntag.read_page(0x04)
         assert data is not None
-        
+
     finally:
         # 恢复现场
         try:
             ntag.auth(test_pwd)
             # 恢复 AUTH0 = 0xFF (关闭保护)
-            ntag.write_page(auth0_addr, b'\x04\x00\x00\xFF')
+            ntag.write_page(auth0_addr, [0x04, 0x00, 0x00, 0xFF])
             # 恢复默认密码
-            ntag.write_page(pwd_addr, b'\xFF\xFF\xFF\xFF')
+            ntag.write_page(pwd_addr, [0xFF, 0xFF, 0xFF, 0xFF])
         except Exception as e:
             trace.error(f"Failed to restore tag state: {e}")

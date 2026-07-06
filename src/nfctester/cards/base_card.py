@@ -11,17 +11,17 @@ class BaseCard(ABC):
         self.uid = None
 
     @abstractmethod
-    def authenticate(self, block_addr: int, key: bytes, key_type: int) -> bool:
+    def authenticate(self, block_addr: int, key: list[int], key_type: int) -> bool:
         """执行认证逻辑"""
         pass
 
     @abstractmethod
-    def read_block(self, block_addr: int) -> bytes:
+    def read_block(self, block_addr: int) -> list[int]:
         """读取块数据"""
         pass
 
     @abstractmethod
-    def write_block(self, block_addr: int, data: bytes) -> bool:
+    def write_block(self, block_addr: int, data: list[int]) -> bool:
         """写入块数据"""
         pass
 

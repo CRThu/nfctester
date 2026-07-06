@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from nfctester.cards import NTAG224
-from nfctester.drivers.card_reader import TransceiveResult
+from nfctester.drivers.card_reader import TransceiveBits
 
 # --- Mock Tests ---
 @pytest.mark.unit
@@ -29,12 +29,12 @@ def test_ntag224_auth_mock():
     
     # 设置 Mock 响应序列
     # Step 1 响应: AF + ek(RndB)
-    res1 = bytes([0xAF]) + ek_RndB
+    res1 = list(bytes([0xAF]) + ek_RndB)
     # Step 2 响应: 00 + ek(RndA')
-    res2 = bytes([0x00]) + ek_RndA_prime
+    res2 = list(bytes([0x00]) + ek_RndA_prime)
     mock_reader.transceive.side_effect = [
-        TransceiveResult(data=res1, rx_bits=0),
-        TransceiveResult(data=res2, rx_bits=0),
+        TransceiveBits(data=res1, bits=0),
+        TransceiveBits(data=res2, bits=0),
     ]
     
     # 2. 创建卡片对象
@@ -45,16 +45,16 @@ def test_ntag224_auth_mock():
         mock_token.return_value = RndA
         
         # 执行认证 (内部会进行 RndA' 校验，失败则抛出异常)
-        tag.auth(KEY)
+        tag.auth(list(KEY))
         
         # 4. 验证 Host 发送给卡片的指令流是否与手册一致
         calls = mock_reader.transceive.call_args_list
         
         # 指令 A: 1A 00
-        assert calls[0].args[0] == bytes([0x1A, 0x00])
+        assert calls[0].args[0] == [0x1A, 0x00]
         
         # 指令 B: AF + ek(RndA + RndB')
-        assert calls[1].args[0] == bytes([0xAF]) + ek_RndA_RndB_prime
+        assert calls[1].args[0] == [0xAF] + list(ek_RndA_RndB_prime)
 
 # --- Integration Tests ---
 @pytest.fixture
@@ -69,7 +69,7 @@ def card(card_reader):
 @pytest.mark.dependency(name="ntag224_write_key")
 def test_ntag224_write_key(card):
     """1. 测试 AES Key 写入 (Page 64-67)"""
-    key = bytes.fromhex("000102030405060708090A0B0C0D0E0F")
+    key = list(bytes.fromhex("000102030405060708090A0B0C0D0E0F"))
     card.write_key(key)
 
 @pytest.mark.hil
@@ -77,7 +77,7 @@ def test_ntag224_write_key(card):
 @pytest.mark.dependency(name="ntag224_auth", depends=["ntag224_write_key"])
 def test_ntag224_auth(card):
     """2. 测试 AES 128 互认证"""
-    key = bytes.fromhex("000102030405060708090A0B0C0D0E0F")
+    key = list(bytes.fromhex("000102030405060708090A0B0C0D0E0F"))
     card.auth(key)
 
 @pytest.mark.hil
@@ -85,7 +85,7 @@ def test_ntag224_auth(card):
 @pytest.mark.dependency(depends=["ntag224_auth"])
 def test_ntag224_read_protected_page(card):
     """3. 测试认证后读取受保护页面 (Page 4)"""
-    key = bytes.fromhex("000102030405060708090A0B0C0D0E0F")
+    key = list(bytes.fromhex("000102030405060708090A0B0C0D0E0F"))
     card.auth(key)
     data = card.read_page(4)
     assert data is not None
