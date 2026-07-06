@@ -1,7 +1,8 @@
 import os
 import sys
+from typing import Callable
 from loguru import logger
-from .handler import TraceHandler
+from .handler import TraceHandler, TraceEvent
 from nfctester.parsers import PN532HSUParser, MifareClassicParser, T2TParser
 
 
@@ -56,9 +57,7 @@ class TraceManager:
         val = os.getenv("CRFT_TRACE_PARSE", "1").lower()
         if val in ("0", "false", "no", "off"):
             return 0
-        if val in ("1", "simple", "summary"):
-            return 1
-        return 2
+        return 1
 
     def _filter(self, record):
         """核心过滤逻辑：Layer 开关优先，普通日志走 Level 过滤"""
@@ -91,8 +90,8 @@ class TraceManager:
         if name in self._layers:
             self._layers[name].enabled = enable
 
-    def set_parse(self, level=2):
-        """设置解析级别: 0=关闭, 1=简单(一行摘要), 2=复杂(树状结构)"""
+    def set_parse(self, level=1):
+        """设置解析级别: 0=关闭(hex), 1=简单(hex + 摘要标签)"""
         for handler in self._layers.values():
             handler.parse_level = level
 
@@ -101,6 +100,16 @@ class TraceManager:
         for handler in self._layers.values():
             for parser in handler.parsers:
                 parser.state["card_type"] = card_type
+
+    def add_sink(self, fn: Callable[[TraceEvent], None]):
+        """注册结构化 trace 事件回调"""
+        for handler in self._layers.values():
+            handler.add_sink(fn)
+
+    def remove_sink(self, fn: Callable[[TraceEvent], None]):
+        """移除结构化 trace 事件回调"""
+        for handler in self._layers.values():
+            handler.remove_sink(fn)
 
     def info(self, msg):    logger.info(msg)
     def error(self, msg):   logger.error(msg)

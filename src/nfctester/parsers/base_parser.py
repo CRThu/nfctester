@@ -50,3 +50,7 @@ class BaseParser(ABC):
     def summary(self, data: bytes) -> str | None:
         """一行摘要，用于简单解析模式。返回 None 则降级为原始 hex"""
         return None
+
+    def parse_rx(self, data: bytes, tx: bytes = None) -> ParsedFrame | None:
+        """根据 TX 上下文解析 RX 响应。tx 为 None 表示无上下文。返回 None 表示不处理。"""
+        return None

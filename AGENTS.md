@@ -93,24 +93,34 @@
 
 ### 第六层：跟踪控制层 (Trace Layer)
 *   **目录**: `src/nfctester/trace/`
-*   **职责**: 提供中心化、解耦的日志处理子系统，区分物理层(driver)和协议层(protocol)的数据流监控。
+*   **职责**: 提供中心化、解耦的日志处理子系统，区分物理层(driver)和协议层(protocol)的数据流监控。支持结构化 sink 回调，外部代码可注册回调接收 `TraceEvent` 对象，无需依赖 loguru 格式化输出。
 *   **核心模块**: 
-    *   `manager.py`: `TraceManager` 门面类，全局单例入口；注入对应解析器到各 Handler。
-    *   `handler.py`: `TraceHandler`，管理流式追加与立即输出；接受 `BaseParser` 实例，调用 `TraceFormatter` 渲染。
-    *   `formatter.py`: `TraceFormatter`，接受 `ParsedFrame` 对象，渲染树状对齐输出（`[+]/[-]- 字段名 : hex  |-- 子字段`）。
+    *   `manager.py`: `TraceManager` 门面类，全局单例入口；注入对应解析器到各 Handler；提供 `add_sink(fn)` / `remove_sink(fn)` 注册结构化事件回调。
+    *   `handler.py`: `TraceHandler`，管理流式追加与立即输出；接受 `BaseParser` 实例，调用 `TraceFormatter` 渲染。记录 `_last_tx` 上下文，RX 解析时传入 TX 命令用于匹配。TX 走命令解析链，RX 调用 `parser.parse_rx(data, tx)`，无匹配降级 raw hex。每次输出后构造 `TraceEvent` 通知所有 sink。
+    *   `formatter.py`: `TraceFormatter`，提供 `format_raw()`（纯 hex）和 `format_summary()`（hex + 摘要标签）两种输出模式。
+*   **TraceEvent 数据结构**:
+    *   `layer`: "DRIVER" | "PROTOCOL"
+    *   `direction`: "TX" | "RX"
+    *   `raw`: 原始字节
+    *   `parsed`: `ParsedFrame | None`（parse_level=0 时为 None）
+    *   `summary`: 一行摘要（parse_level=1 时有值）
+    *   `formatted`: 已渲染的文本消息
+    *   `timestamp`: `time.time()`
 *   **设计原则**: 严禁在驱动层使用硬编码的打印语句。通信日志必须通过 `trace` 的对应层级 Handler 统一输出，实现业务与日志的严格分离。
 
 ### 第七层：协议解析层 (Parsers Layer)
 *   **目录**: `src/nfctester/parsers/`
-*   **职责**: 将字节流解析为含语义描述的结构化字段树，供 `TraceFormatter` 渲染，与日志层解耦。
+*   **职责**: 将字节流解析为含语义描述的结构化数据，供 `TraceFormatter` 渲染，与日志层解耦。同时支持命令解析（TX）和响应解析（RX）两条路径。
 *   **数据结构**:
     *   `ParsedField`: 单个字段（名称、原始字节、数值、描述、子字段列表）。
     *   `ParsedFrame`: 顶层结果（字段列表、帧标签、有效性标志）。
 *   **核心模块**:
-    *   `base_parser.py`: `BaseParser` 抽象基类，定义 `can_parse(data)` 和 `parse(data) -> ParsedFrame` 接口。
+    *   `base_parser.py`: `BaseParser` 抽象基类，定义 `can_parse(data)` / `parse(data) -> ParsedFrame` 命令接口，以及 `parse_rx(data, tx=None) -> ParsedFrame | None` 响应接口（默认返回 None）。`tx` 参数提供 TX 命令上下文用于 RX 匹配。
+    *   `table_parser.py`: `TableParser`，基于 `CMD_TABLE` 指令表的通用解析器基类。子类只需定义 `CMD_TABLE` 和可选的 `RESPONSES` dict，自动获得命令解析和单字节响应解析能力。
     *   `pn532_hsu_parser.py`: `PN532HSUParser`，解析 PN532 HSU 物理帧（ACK/NACK/Normal Frame），含 TFI/CMD/Status/Payload 子字段。
-    *   `mifare_classic_parser.py`: `MifareClassicParser`，解析剥离 PN532 封装后的 Mifare Classic 指令层（READ/AUTH/HALT）。
-    *   `t2t_parser.py`: `T2TParser`，解析 NFC Forum Type 2 Tag 指令层（READ/WRITE/PWD_AUTH/HALT，ACK/NACK 响应）。
+    *   `mifare_classic_parser.py`: `MifareClassicParser`，解析剥离 PN532 封装后的 Mifare Classic 指令层（READ/AUTH/HALT）。`parse_rx` 基于 TX 命令匹配：ACK/NACK + READ 16 字节 block 数据。
+    *   `t2t_parser.py`: `T2TParser`，解析 NFC Forum Type 2 Tag 指令层（READ/WRITE/PWD_AUTH/HALT）。`parse_rx` 基于 TX 命令匹配：ACK/NACK + READ 页数据 + PWD_AUTH PACK + READ_SIG 签名。
+*   **TX/RX 分离机制**: `TraceHandler` 记录 `_last_tx` 上下文。TX 使用 `can_parse()` + `parse()` 解析命令结构；RX 调用 `parse_rx(data, tx=_last_tx)`，parser 根据 TX 命令类型准确解析响应（如 READ→block 数据，WRITE→ACK），多字节或未知响应降级为 raw hex。
 *   **设计原则**: 解析器只做结构化解析，不负责任何格式化输出。可通过 `TraceHandler(parser=XxxParser())` 按需注入，与具体协议无关。
 
 ### 第八层：脚本/CLI 层 (Scripts/CLI Layer)

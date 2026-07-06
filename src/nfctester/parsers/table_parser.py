@@ -22,13 +22,9 @@ class TableParser(BaseParser):
     def can_parse(self, data: bytes) -> bool:
         if not data:
             return False
-        if self.RESPONSES and len(data) == 1 and data[0] in self.RESPONSES:
-            return True
         return data[0] in self.CMD_TABLE
 
     def summary(self, data: bytes) -> str | None:
-        if self.RESPONSES and len(data) == 1 and data[0] in self.RESPONSES:
-            return self.RESPONSES[data[0]]
         cmd = data[0]
         if cmd not in self.CMD_TABLE:
             return None
@@ -42,12 +38,21 @@ class TableParser(BaseParser):
             return f"{label} ({length} bytes)"
         return f"{label} ({len(data) - 1} bytes)"
 
+    def parse_rx(self, data: bytes, tx: bytes = None) -> ParsedFrame | None:
+        """根据 TX 上下文解析 RX 响应。仅匹配 RESPONSES 中的单字节响应码。"""
+        if not data or not self.RESPONSES or len(data) != 1:
+            return None
+        code = data[0]
+        if code not in self.RESPONSES:
+            return None
+        desc = self.RESPONSES[code]
+        label = desc.split("—")[0].strip() if "—" in desc else "Response"
+        return ParsedFrame(
+            raw=data, label=label,
+            fields=[ParsedField("Response", data, code, desc)]
+        )
+
     def parse(self, data: bytes) -> ParsedFrame:
-        if self.RESPONSES and len(data) == 1 and data[0] in self.RESPONSES:
-            return ParsedFrame(
-                raw=data, label="Response",
-                fields=[ParsedField("Response", data, data[0], self.RESPONSES[data[0]])]
-            )
         cmd = data[0]
         label, specs = self.CMD_TABLE.get(cmd, (f"UNKNOWN (0x{cmd:02X})", []))
         fields = [ParsedField("Command", data[0:1], cmd, label)]
