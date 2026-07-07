@@ -156,3 +156,104 @@ class TestRXParsing:
         h = _make_handler()
         h(rx=b'\x0A')
         assert h._last_tx is None
+
+
+class TestBitInfo:
+
+    def test_tx_bits_7_shows_in_output(self):
+        h = _make_handler(parse_level=0)
+        h(tx=b'\x26', tx_bits=7)
+        msg = h.logger_func.call_args[0][0]
+        assert "[7 bits]" in msg
+        assert "26" in msg
+
+    def test_rx_bits_4_shows_in_output(self):
+        h = _make_handler(parse_level=0)
+        h(rx=b'\x04', rx_bits=4)
+        msg = h.logger_func.call_args[0][0]
+        assert "[4 bits]" in msg
+
+    def test_full_byte_no_bits_annotation(self):
+        h = _make_handler(parse_level=0)
+        h(tx=b'\x30\x04')
+        msg = h.logger_func.call_args[0][0]
+        assert "bits" not in msg
+
+    def test_bits_8_treated_as_full_byte(self):
+        h = _make_handler(parse_level=0)
+        h(tx=b'\x30\x04', tx_bits=8)
+        msg = h.logger_func.call_args[0][0]
+        assert "bits" not in msg
+
+    def test_tx_bits_with_summary_parser(self):
+        from nfctester.parsers import T2TParser
+        h = _make_handler(parsers=[T2TParser()], parse_level=1)
+        h(tx=b'\x26', tx_bits=7)
+        msg = h.logger_func.call_args[0][0]
+        assert "[7 bits]" in msg
+
+    def test_rx_bits_with_summary_parser(self):
+        from nfctester.parsers import T2TParser
+        h = _make_handler(parsers=[T2TParser()], parse_level=1)
+        h(tx=b'\x30\x00')
+        h(rx=b'\x04', rx_bits=4)
+        rx_msg = h.logger_func.call_args_list[1][0][0]
+        assert "[4 bits]" in rx_msg
+
+    def test_bits_0_no_annotation(self):
+        h = _make_handler(parse_level=0)
+        h(tx=b'\x26', tx_bits=0)
+        msg = h.logger_func.call_args[0][0]
+        assert "bits" not in msg
+
+    def test_last_tx_bits_recorded(self):
+        h = _make_handler(parse_level=0)
+        h(tx=b'\x26', tx_bits=7)
+        assert h._last_tx_bits == 7
+
+
+class TestFlushFalse:
+
+    def test_tx_flush_false_buffers(self):
+        h = _make_handler(parse_level=0)
+        h(tx=b'\x30\x04', flush=False)
+        h.logger_func.assert_not_called()
+        h(tx=b'\x00\x01')
+        h.logger_func.assert_called_once()
+        msg = h.logger_func.call_args[0][0]
+        assert "30 04 00 01" in msg
+
+    def test_rx_flush_false_buffers(self):
+        h = _make_handler(parse_level=0)
+        h(rx=b'\xAA\xBB', flush=False)
+        h.logger_func.assert_not_called()
+        h(rx=b'\xCC')
+        h.logger_func.assert_called_once()
+        msg = h.logger_func.call_args[0][0]
+        assert "AA BB CC" in msg
+
+
+class TestSummaryNone:
+
+    def test_tx_summary_none_falls_back_to_raw(self):
+        from unittest.mock import MagicMock
+        class NoSummaryParser:
+            def can_parse(self, data):
+                return True
+            def summary(self, data):
+                return None
+        h = _make_handler(parsers=[NoSummaryParser()], parse_level=1)
+        h(tx=b'\x30\x04')
+        msg = h.logger_func.call_args[0][0]
+        assert "30 04" in msg
+
+
+class TestParseLevel2:
+
+    def test_rx_parse_level_2_returns_raw_with_frame(self):
+        from nfctester.parsers import T2TParser
+        h = _make_handler(parsers=[T2TParser()], parse_level=2)
+        h(tx=b'\x30\x00')
+        h(rx=b'\x01\x02\x03\x04')
+        msg = h.logger_func.call_args_list[1][0][0]
+        assert "01 02 03 04" in msg

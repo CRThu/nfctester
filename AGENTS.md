@@ -19,13 +19,13 @@
     *   `CLRC663`（注册为 `"clrc663"`）: CLRC663 UART 协议驱动，通过串口寄存器读写和 FIFO 命令机制与芯片通信。支持 ISO/IEC 14443A 协议，可无缝替换 PN532 读卡器。
 *   **CardReader ABC 接口**（`card_reader.py`）:
     *   **数据结构**:
-        *   `CardInfo`: 寻卡结果数据类，包含 `uid` (list[int])、`atq` (list[int])、`sak` (int)。
+        *   `CardInfo`: 寻卡结果数据类，包含 `uid` (list[int])、`atq` (list[int])、`sak` (int)。仅包含硬件真实数据，不含推测信息。
         *   `TransceiveBits`: 收发结果数据类，包含 `data` (list[int] | None) 和 `bits` (int)（最后字节有效位数，0 = 整字节有效）。
     *   **生命周期**: `open()` 初始化硬件，`close()` 释放资源。
     *   **RF 控制**: `rf_field` 属性（getter/setter），开关物理天线驱动。
-    *   **寻卡**: `active()` (REQA → anticoll → SELECT)。
+    *   **寻卡**: `active()` 模板方法（基类实现），内部调用子类 `_do_active()` 执行 REQA → anticoll → SELECT，寻卡成功后自动根据 ATQA/SAK 调用 `trace.set_parser()` 切换协议解析器。驱动子类只需实现 `_do_active()`。
     *   **Mifare**: `mf_crypto` 属性（读取加密引擎状态），`mf_auth(block, key_type, key, uid)`（执行 Mifare Classic 认证，成功后 `mf_crypto` 变为 True，后续 `transceive` 自动加密）。
-    *   **数据交换**: `transceive(data, last_tx_bits=0, tx_crc=True, rx_crc=True)` 返回 `TransceiveBits`（含 `.data` 和 `.bits` 属性），支持位级发送。
+    *   **数据交换**: `transceive(data, last_tx_bits=0, tx_crc=True, rx_crc=True)` 返回 `TransceiveBits`（含 `.data` 和 `.bits` 属性），支持位级发送。`last_tx_bits` 和 RX `bits` 信息通过 `trace.protocol(tx_bits=..., rx_bits=...)` 传递到 trace 层，在输出中显示为 `[N bits]` 标注。
     *   **CRC 控制**: `set_crc()` 已移除公开接口，CRC 通过 `transceive` 的 `tx_crc`/`rx_crc` 参数控制。驱动内部仍使用 `_set_crc()` 私有方法。
     *   **已移除**: `exchange()` 方法（合并入 `transceive`），`set_rf_field()`/`get_rf_field()` 方法（改为 `rf_field` 属性），`wakeup()`/`halt()` 方法（nfcscript 通过 raw transceive 实现）。
 *   **CLRC663 驱动特点**:
@@ -53,6 +53,7 @@
     *   `TransportRegistry`: 传输层类注册表。使用 `@TransportRegistry.register("name")` 装饰器注册 Transport 实现，`TransportRegistry.create("name", **kwargs)` 实例化。
     *   `CardReaderRegistry`: 读卡器类注册表。使用 `@CardReaderRegistry.register("name")` 装饰器注册 CardReader 实现。`CardReaderRegistry.create("name", transport="serial", **kwargs)` 可一行创建 reader（自动创建 transport 并注入）。
     *   `CardRegistry`: 卡片类注册表。使用 `@CardRegistry.register("name")` 装饰器注册 Card 实现。`CardRegistry.create("name", reader, **kwargs)` 可动态创建卡片实例。
+    *   `ParserRegistry`: 协议解析器注册表。使用 `@ParserRegistry.register(atqa=..., sak=..., name=...)` 装饰器注册 ATQA/SAK → 解析器类映射，`get(atqa, sak)` 返回解析器类，`get_name(atqa, sak)` 返回显示名称，`list()` 返回所有已注册键。通过 `nfctester.ParserRegistry` 导出，支持外部扩展。
     *   `Session` / `session()`: 上下文管理器，封装 reader 的 open/close 生命周期，类似 C# 的 `using`。通过 `__getattr__` 委托所有 reader 方法调用，无需显式透传。
 *   **入口点发现**: `load_entry_points()` 在包初始化时扫描 `nfctester.transports` / `nfctester.readers` entry-points，自动注册外部包的实现。
 *   **外部扩展**: 外部脚本只需继承 `CardReader` 基类并用 `@CardReaderRegistry.register("name")` 装饰，import 即注册，无需打包。
@@ -95,9 +96,9 @@
 *   **目录**: `src/nfctester/trace/`
 *   **职责**: 提供中心化、解耦的日志处理子系统，区分物理层(driver)和协议层(protocol)的数据流监控。支持结构化 sink 回调，外部代码可注册回调接收 `TraceEvent` 对象，无需依赖 loguru 格式化输出。
 *   **核心模块**: 
-    *   `manager.py`: `TraceManager` 门面类，全局单例入口；注入对应解析器到各 Handler；提供 `add_sink(fn)` / `remove_sink(fn)` 注册结构化事件回调。
-    *   `handler.py`: `TraceHandler`，管理流式追加与立即输出；接受 `BaseParser` 实例，调用 `TraceFormatter` 渲染。记录 `_last_tx` 上下文，RX 解析时传入 TX 命令用于匹配。TX 走命令解析链，RX 调用 `parser.parse_rx(data, tx)`，无匹配降级 raw hex。每次输出后构造 `TraceEvent` 通知所有 sink。
-    *   `formatter.py`: `TraceFormatter`，提供 `format_raw()`（纯 hex）和 `format_summary()`（hex + 摘要标签）两种输出模式。
+    *   `manager.py`: `TraceManager` 门面类，全局单例入口；注入对应解析器到各 Handler；提供 `set_parser(atqa, sak)` 根据 `ParserRegistry` 动态切换协议解析器，`add_sink(fn)` / `remove_sink(fn)` 注册结构化事件回调。
+    *   `handler.py`: `TraceHandler`，管理流式追加与立即输出；接受 `BaseParser` 实例，调用 `TraceFormatter` 渲染。记录 `_last_tx` 上下文，RX 解析时传入 TX 命令用于匹配。`__call__` 支持 `tx_bits`/`rx_bits` 参数，非整字节时在输出中追加 `[N bits]` 标注（如 `TX ->  26 [7 bits]`）。TX 走命令解析链，RX 调用 `parser.parse_rx(data, tx)`，无匹配降级 raw hex。每次输出后构造 `TraceEvent` 通知所有 sink。
+    *   `formatter.py`: `TraceFormatter`，提供 `format_raw()`（纯 hex）和 `format_summary()`（hex + 摘要标签）两种输出模式，均支持 `bits` 参数追加位级标注。
 *   **TraceEvent 数据结构**:
     *   `layer`: "DRIVER" | "PROTOCOL"
     *   `direction`: "TX" | "RX"
@@ -110,20 +111,21 @@
 
 ### 第七层：协议解析层 (Parsers Layer)
 *   **目录**: `src/nfctester/parsers/`
-*   **职责**: 将字节流解析为含语义描述的结构化数据，供 `TraceFormatter` 渲染，与日志层解耦。同时支持命令解析（TX）和响应解析（RX）两条路径。
+*   **职责**: 将字节流解析为含语义描述的结构化数据，供 `TraceFormatter` 渲染，与日志层解耦。同时支持命令解析（TX）和响应解析（RX）两条路径。通过 `ParserRegistry` 注册 ATQA/SAK → 解析器类映射，寻卡时自动切换协议解析器。
 *   **数据结构**:
     *   `ParsedField`: 单个字段（名称、原始字节、数值、描述、子字段列表）。
     *   `ParsedFrame`: 顶层结果（字段列表、帧标签、有效性标志）。
 *   **核心模块**:
+    *   `registry.py`: `ParserRegistry`，ATQA/SAK → 解析器类注册表。使用 `@ParserRegistry.register(atqa=..., sak=..., name=...)` 装饰器注册，`get(atqa, sak)` 返回匹配的解析器类，`get_name(atqa, sak)` 返回显示名称。支持外部扩展：新解析器只需 `from nfctester import ParserRegistry` 并用装饰器注册。
     *   `base_parser.py`: `BaseParser` 抽象基类，定义 `can_parse(data)` / `parse(data) -> ParsedFrame` 命令接口，以及 `parse_rx(data, tx=None) -> ParsedFrame | None` 响应接口（默认返回 None）。`tx` 参数提供 TX 命令上下文用于 RX 匹配。
     *   `table_parser.py`: `TableParser`，基于 `CMD_TABLE` 指令表的通用解析器基类。子类只需定义 `CMD_TABLE` 和可选的 `RESPONSES` dict，自动获得命令解析和单字节响应解析能力。
     *   `pn532_hsu_parser.py`: `PN532HSUParser`，解析 PN532 HSU 物理帧（ACK/NACK/Normal Frame），含 TFI/CMD/Status/Payload 子字段。
-    *   `mifare_classic_parser.py`: `MifareClassicParser`，解析剥离 PN532 封装后的 Mifare Classic 指令层（READ/AUTH/HALT）。`parse_rx` 基于 TX 命令匹配：ACK/NACK + READ 16 字节 block 数据。
-    *   `t2t_parser.py`: `T2TParser`，解析 NFC Forum Type 2 Tag 指令层（READ/WRITE/PWD_AUTH/HALT）。`parse_rx` 基于 TX 命令匹配：ACK/NACK + READ 页数据 + PWD_AUTH PACK + READ_SIG 签名。
+    *   `mifare_classic_parser.py`: `MifareClassicParser`，注册 3 个 ATQA/SAK 组合 (1K/4K/4K alt)，解析 Mifare Classic 指令层。`parse_rx` 基于 TX 命令匹配：ACK/NACK + READ 16 字节 block 数据。
+    *   `t2t_parser.py`: `T2TParser`，注册 3 个 ATQA/SAK 组合 (T2T/Ultralight/Plus)，解析 NFC Forum Type 2 Tag 指令层。`parse_rx` 基于 TX 命令匹配：ACK/NACK + READ 页数据 + PWD_AUTH PACK + READ_SIG 签名。
 *   **TX/RX 分离机制**: `TraceHandler` 记录 `_last_tx` 上下文。TX 使用 `can_parse()` + `parse()` 解析命令结构；RX 调用 `parse_rx(data, tx=_last_tx)`，parser 根据 TX 命令类型准确解析响应（如 READ→block 数据，WRITE→ACK），多字节或未知响应降级为 raw hex。
-*   **设计原则**: 解析器只做结构化解析，不负责任何格式化输出。可通过 `TraceHandler(parser=XxxParser())` 按需注入，与具体协议无关。
+*   **设计原则**: 解析器只做结构化解析，不负责任何格式化输出。通过 `@ParserRegistry.register()` 声明 ATQA/SAK 映射，`TraceManager.set_parser(atqa, sak)` 在寻卡时动态切换。
 
-### 第八层：脚本/CLI 层 (Scripts/CLI Layer)
+### 第九层：脚本/CLI 层 (Scripts/CLI Layer)
 *   **目录**: `src/nfctester/tools/`
 *   **职责**: 提供命令行接口 (CLI) 以直接调用核心加密/通信逻辑。
 *   **运行方式**: `uv run aes128-cli -m encrypt -i <hex> -k <key>`

@@ -265,7 +265,7 @@ class CLRC663(CardReader):
                 break
         return (list(full_uid), sak)
 
-    def active(self) -> CardInfo | None:
+    def _do_active(self) -> CardInfo | None:
         """ISO 14443-A 寻卡: REQA → Anti-collision → SELECT"""
         try:
             # REQA (7-bit short frame, 无 CRC)
@@ -341,7 +341,7 @@ class CLRC663(CardReader):
     def transceive(self, data: list[int], last_tx_bits: int = 0, tx_crc: bool = True, rx_crc: bool = True) -> TransceiveBits:
         """数据交换（支持位级发送 + CRC 控制）"""
         raw = bytes(data)
-        self.trace.protocol(tx=raw)
+        self.trace.protocol(tx=raw, tx_bits=last_tx_bits)
 
         use_bit_framing = last_tx_bits not in (0, 8)
         if use_bit_framing:
@@ -383,5 +383,5 @@ class CLRC663(CardReader):
         if err:
             self.trace.warning(f"CLRC663 transceive error: {err}")
 
-        self.trace.protocol(rx=response)
+        self.trace.protocol(rx=response, rx_bits=last_bits)
         return TransceiveBits(data=list(response), bits=last_bits)

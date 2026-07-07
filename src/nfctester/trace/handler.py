@@ -36,6 +36,7 @@ class TraceHandler:
         self._tx_buffer   = bytearray()
         self._rx_buffer   = bytearray()
         self._last_tx: bytes | None = None
+        self._last_tx_bits: int = 0
         self._sinks: list[Callable[[TraceEvent], None]] = []
 
     def add_sink(self, fn: Callable[[TraceEvent], None]):
@@ -46,59 +47,60 @@ class TraceHandler:
         if fn in self._sinks:
             self._sinks.remove(fn)
 
-    def __call__(self, tx: bytes = None, rx: bytes = None, flush: bool = True):
+    def __call__(self, tx: bytes = None, rx: bytes = None, tx_bits: int = 0, rx_bits: int = 0, flush: bool = True):
         """处理日志输出，支持流式追加（flush=False）和立即输出（flush=True）"""
         if tx:
             raw = bytes(self._tx_buffer) + tx if self._tx_buffer else tx
             self._tx_buffer.clear()
             self._last_tx = raw
-            if flush:   self._emit("TX", raw)
+            self._last_tx_bits = tx_bits
+            if flush:   self._emit("TX", raw, tx_bits)
             else:       self._tx_buffer.extend(raw)
 
         if rx:
             raw = bytes(self._rx_buffer) + rx if self._rx_buffer else rx
             self._rx_buffer.clear()
-            if flush:   self._emit("RX", raw)
+            if flush:   self._emit("RX", raw, rx_bits)
             else:       self._rx_buffer.extend(raw)
 
-    def _emit(self, direction: str, raw: bytes):
+    def _emit(self, direction: str, raw: bytes, bits: int = 0):
         parsed = None
         summary = None
 
         if direction == "TX":
-            msg, parsed, summary = self._emit_tx(raw)
+            msg, parsed, summary = self._emit_tx(raw, bits)
         else:
-            msg, parsed, summary = self._emit_rx(raw)
+            msg, parsed, summary = self._emit_rx(raw, bits)
 
         self.logger_func(msg)
         self._notify_sinks(direction, raw, parsed, summary, msg)
 
-    def _emit_tx(self, raw: bytes) -> tuple[str, ParsedFrame | None, str | None]:
+    def _emit_tx(self, raw: bytes, bits: int = 0) -> tuple[str, ParsedFrame | None, str | None]:
         if self.parse_level == 0:
-            return TraceFormatter.format_raw("TX", raw), None, None
+            return TraceFormatter.format_raw("TX", raw, bits), None, None
 
         parser = next((p for p in self.parsers if p.can_parse(raw)), None)
         if not parser:
-            return TraceFormatter.format_raw("TX", raw), None, None
+            return TraceFormatter.format_raw("TX", raw, bits), None, None
 
         summary = parser.summary(raw)
         if summary:
-            return TraceFormatter.format_summary("TX", raw, summary), None, summary
-        return TraceFormatter.format_raw("TX", raw), None, None
+            return TraceFormatter.format_summary("TX", raw, summary, bits), None, summary
+        return TraceFormatter.format_raw("TX", raw, bits), None, None
 
-    def _emit_rx(self, raw: bytes) -> tuple[str, ParsedFrame | None, str | None]:
+    def _emit_rx(self, raw: bytes, bits: int = 0) -> tuple[str, ParsedFrame | None, str | None]:
         if self.parse_level == 0:
-            return TraceFormatter.format_raw("RX", raw), None, None
+            return TraceFormatter.format_raw("RX", raw, bits), None, None
 
         for parser in self.parsers:
             frame = parser.parse_rx(raw, tx=self._last_tx)
             if frame:
                 summary = frame.label
                 if self.parse_level == 1:
-                    return TraceFormatter.format_summary("RX", raw, summary), frame, summary
-                return TraceFormatter.format_raw("RX", raw), frame, None
+                    return TraceFormatter.format_summary("RX", raw, summary, bits), frame, summary
+                return TraceFormatter.format_raw("RX", raw, bits), frame, None
 
-        return TraceFormatter.format_raw("RX", raw), None, None
+        return TraceFormatter.format_raw("RX", raw, bits), None, None
 
     def _notify_sinks(self, direction, raw, parsed, summary, msg):
         if not self._sinks:

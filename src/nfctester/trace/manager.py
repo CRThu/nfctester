@@ -3,7 +3,7 @@ import sys
 from typing import Callable
 from loguru import logger
 from .handler import TraceHandler, TraceEvent
-from nfctester.parsers import PN532HSUParser, MifareClassicParser, T2TParser
+from nfctester.parsers import PN532HSUParser
 
 
 def trace_format(record):
@@ -31,7 +31,7 @@ class TraceManager:
             "PROTOCOL": TraceHandler(
                 layer_name="PROTOCOL",
                 logger_func=logger.bind(layer="PROTOCOL").trace,
-                parsers=[MifareClassicParser(), T2TParser()],
+                parsers=[],
                 parse_level=parse_level,
             ),
         }
@@ -95,11 +95,12 @@ class TraceManager:
         for handler in self._layers.values():
             handler.parse_level = level
 
-    def set_card_type(self, card_type: str):
-        """设置当前卡片类型，注入到所有协议解析器的 state 中"""
-        for handler in self._layers.values():
-            for parser in handler.parsers:
-                parser.state["card_type"] = card_type
+    def set_parser(self, atqa: int, sak: int):
+        """根据 ATQA/SAK 从 ParserRegistry 动态设置协议解析器"""
+        from nfctester.parsers.registry import ParserRegistry
+        parser_cls = ParserRegistry.get(atqa, sak)
+        if parser_cls:
+            self.protocol.parsers = [parser_cls()]
 
     def add_sink(self, fn: Callable[[TraceEvent], None]):
         """注册结构化 trace 事件回调"""

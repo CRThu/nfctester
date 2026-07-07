@@ -1,11 +1,15 @@
 from .table_parser import TableParser
 from .base_parser import ParsedField, ParsedFrame
+from .registry import ParserRegistry
 
 
 def _blk(b): return f"Block {b[0]} / Sector {b[0] // 4}"
 def _pay(b): return f"{len(b)} bytes"
 
 
+@ParserRegistry.register(atqa=0x0004, sak=0x08, name="MIFARE Classic 1K")
+@ParserRegistry.register(atqa=0x0002, sak=0x18, name="MIFARE Classic 4K")
+@ParserRegistry.register(atqa=0x0004, sak=0x18, name="MIFARE Classic 4K (alt)")
 class MifareClassicParser(TableParser):
     """Mifare Classic 指令层解析器
 

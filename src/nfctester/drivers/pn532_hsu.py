@@ -210,7 +210,7 @@ class PN532_HSU(CardReader):
 
     # --- 寻卡 ---
 
-    def active(self) -> CardInfo | None:
+    def _do_active(self) -> CardInfo | None:
         """REQA → anticoll → SELECT"""
         self.transport.flush_input()
         res = self._req(b'\x4A\x01\x00')
@@ -262,7 +262,7 @@ class PN532_HSU(CardReader):
         否则使用 InCommunicateThru（透传）。
         """
         raw = bytes(data)
-        self.trace.protocol(tx=raw)
+        self.trace.protocol(tx=raw, tx_bits=last_tx_bits)
 
         if self._mf_crypto_active:
             # InDataExchange: 自动处理 Mifare Crypto1 加密
@@ -285,7 +285,6 @@ class PN532_HSU(CardReader):
             # 0 = 发送完整字节；非 0 = 最后字节仅发送指定位数
             if last_tx_bits != 0:
                 self._modify_reg(0x633D, 0x07, last_tx_bits & 0x07)
-                self.trace.debug(f"{'LAST_TX_BITS':<12}: {last_tx_bits}")
 
             # 0x42 (InCommunicateThru)
             self._set_crc(tx_crc, rx_crc)
@@ -302,12 +301,10 @@ class PN532_HSU(CardReader):
             ciu_ctrl = self._read_reg(0x633C)
             last_bits = (ciu_ctrl & 0x07) if ciu_ctrl is not None else 0
 
-            if last_bits != 0:
-                self.trace.debug(f"{'LAST_RX_BITS':<12}: {last_bits}")
             # 响应格式: 0x43 (Response), Status, [Data]
             if res and len(res) >= 2 and res[0] == 0x43:
                 if res[1] == 0x00:
-                    self.trace.protocol(rx=res[2:])
+                    self.trace.protocol(rx=res[2:], rx_bits=last_bits)
                     return TransceiveBits(data=list(res[2:]), bits=last_bits)
                 else:
                     err_msg = self.PN532_ERRORS.get(res[1], "未知错误")

@@ -8,6 +8,7 @@
 import serial
 import time
 from nfctester.trace import trace
+from nfctester.parsers.registry import ParserRegistry
 import sys
 
 # 配置 loguru 输出格式 (已移至 trace 管理)
@@ -102,19 +103,11 @@ class PN532_HSU:
             sak = res[5]
             uid_len = res[6]
             uid = res[7 : 7 + uid_len]
-            
-            # 判断卡片类型
-            card_type = "未知类型"
-            if sak == 0x00:
-                card_type = "NTAG / Mifare Ultralight"
-            elif sak == 0x08:
-                card_type = "Mifare Classic 1K"
-            elif sak == 0x18:
-                card_type = "Mifare Classic 4K"
-            elif sak == 0x20:
-                card_type = "ISO14443-4 兼容卡 (如 CPU卡)"
 
-            trace.success(f"发现卡片! 类型: {card_type}")
+            # 根据 ATQA/SAK 查询协议名称
+            # PN532 InListPassiveTarget 不返回 ATQA，仅用 SAK 查询
+            name = ParserRegistry.get_name(0, sak) or "未知类型"
+            trace.success(f"发现卡片! 类型: {name}")
             trace.info(f"UID: {uid.hex(' ').upper()} | SAK: 0x{sak:02X}")
             print("-" * 30)
             return uid, sak

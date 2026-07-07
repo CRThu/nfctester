@@ -8,27 +8,28 @@
 
 ## 🌟 核心特性
 
-- **分层架构**: 清晰的 8 层体系结构，模块化程度高，易于维护与扩展。
+- **分层架构**: 清晰的 9 层体系结构，模块化程度高，易于维护与扩展。
 - **广泛的协议支持**:
   - **卡片**: Mifare Classic, ISO14443A, NFC Forum Type 2 Tag (NTAG21x/22x 等)。
   - **芯片**: 深度优化 PN532 HSU 和 CLRC663 UART 驱动，均支持位帧 (Bit-framing) 收发。
 - **强大加密支持**: 内置 AES-128 (CBC)、Mifare Crypto1 算法引擎，支持 NTAG22x AES 互认证。
-- **可视化跟踪**: 独特的跟踪控制层与协议解析层，提供树状结构化的通信日志输出，完美还原协议交互细节。
-- **插件化扩展**: 通过 Registry 模式，外部只需 `.py` 文件 + 装饰器即可接入自定义读卡器，无需打包。
+- **可视化跟踪**: 跟踪控制层与协议解析层，提供结构化的通信日志输出（hex + 摘要标签），完美还原协议交互细节。
+- **协议解析器自动切换**: 通过 `ParserRegistry` 注册 ATQA/SAK → 解析器映射，寻卡时自动切换协议解析器。
+- **插件化扩展**: 通过 Registry 模式，外部只需 `.py` 文件 + 装饰器即可接入自定义读卡器和协议解析器，无需打包。
 
-## 🏗️ 架构体系 (8-Layer Architecture)
+## 🏗️ 架构体系 (9-Layer Architecture)
 
-项目遵循高度抽象的设计模式，分为以下八层：
+项目遵循高度抽象的设计模式，分为以下九层：
 
 1.  **硬件传输层 (Hardware)**: 负责底层字节流传输（如 `SerialTransport`）。
 2.  **驱动层 (Driver)**: 实现特定芯片（如 PN532、CLRC663）的协议封装与寄存器操作。
-3.  **注册表与会话 (Registry)**: 类注册、会话管理，贯穿硬件层与驱动层。
+3.  **注册表与会话 (Registry)**: 类注册（Transport/CardReader/Card/Parser）、会话管理，贯穿硬件层与驱动层。
 4.  **卡片逻辑层 (Card)**: 定义各种 RFID 标签与智能卡的协议行为（Mifare, NTAG 等）。
 5.  **加密算法层 (Crypto)**: 提供原子级的加密/解密操作（AES, Crypto1）。
 6.  **通用工具层 (Utility)**: 包含 CRC 校验、位操作等基础辅助函数。
 7.  **跟踪控制层 (Trace)**: 中心化的日志管理系统，实现业务逻辑与通信监控的分离。
-8.  **协议解析层 (Parsers)**: 将字节流解析为结构化字段树，供格式化输出使用。
-9.  **脚本/CLI 层 (CLI)**: 提供开箱即用的命令行工具。
+8.  **协议解析层 (Parsers)**: 将字节流解析为结构化字段，供格式化输出使用。
+9.  **脚本/CLI 层 (CLI)**: 提供开箱即用的命令行工具（如 `aes128-cli`、`pn532-scanner`）。
 
 ## 🚀 快速上手
 
@@ -54,7 +55,7 @@ from nfctester.registry import CardReaderRegistry, CardRegistry
 reader = CardReaderRegistry.create("pn532", transport="serial", port="COM20")
 reader.open()
 
-# 2. 寻卡并创建卡片实例
+# 2. 寻卡（自动切换协议解析器）
 card_info = reader.active()
 if card_info:
     # 假设已知卡片类型为 mifare_classic
@@ -136,7 +137,7 @@ class TCPTransport(Transport):
 
 ```python
 from nfctester.registry import CardReaderRegistry
-from nfctester.drivers import CardReader, CardInfo, TransceiveResult
+from nfctester.drivers.card_reader import CardReader, CardInfo, TransceiveBits
 
 @CardReaderRegistry.register("acr122u")
 class ACR122UReader(CardReader):
@@ -150,9 +151,9 @@ class ACR122UReader(CardReader):
     def close(self):
         self.transport.close()
 
-    def get_version(self) -> bytes:
+    def get_version(self) -> list[int]:
         self.transport.write(b"\xFF\x00\x48\x00\x00")
-        return self.transport.read(10)
+        return list(self.transport.read(10))
 
     @property
     def rf_field(self) -> bool:
@@ -162,36 +163,27 @@ class ACR122UReader(CardReader):
     def rf_field(self, enabled: bool):
         pass
 
-    def active(self) -> CardInfo | None:
+    def _do_active(self) -> CardInfo | None:
         cmd = b"\xD4\x4A\x01\x00"
         frame = bytes([0xFF, 0x00, 0x00, 0x00, len(cmd)]) + cmd
         self.transport.write(frame)
         res = self.transport.read(20)
         if res and len(res) >= 10:
-            return CardInfo(uid=res[6:10], atq=res[2:4], sak=res[4])
+            return CardInfo(uid=list(res[6:10]), atq=list(res[2:4]), sak=res[4])
         return None
-
-    def wakeup(self) -> CardInfo | None:
-        return self.active()
-
-    def halt(self) -> bool:
-        return True
 
     @property
     def mf_crypto(self) -> bool:
         return False
 
-    def mf_auth(self, block: int, key_type: int, key: bytes, uid: bytes) -> bool:
+    def mf_auth(self, block: int, key_type: int, key: list[int], uid: list[int]) -> bool:
         return False
 
-    def transceive(self, data: bytes, tx_crc: bool = True, rx_crc: bool = True) -> TransceiveResult:
-        frame = bytes([0xFF, 0x00, 0x00, 0x00, len(data)]) + data
+    def transceive(self, data: list[int], last_tx_bits: int = 0, tx_crc: bool = True, rx_crc: bool = True) -> TransceiveBits:
+        frame = bytes([0xFF, 0x00, 0x00, 0x00, len(data)]) + bytes(data)
         self.transport.write(frame)
         res = self.transport.read(262)
-        return TransceiveResult(data=res, rx_bits=0)
-
-    def transceive_bits(self, data: bytes, last_tx_bits: int = 0, tx_crc: bool = True, rx_crc: bool = True) -> TransceiveResult:
-        return self.transceive(data, tx_crc, rx_crc)
+        return TransceiveBits(data=list(res) if res else None, bits=0)
 ```
 
 ### 3. 使用你的自定义读卡器
@@ -206,9 +198,29 @@ card_info = reader.active()
 reader.close()
 ```
 
-### 4. 自定义卡片注册 (CardRegistry)
+### 4. 自定义协议解析器 (ParserRegistry)
 
-查看 `examples/custom_card.py` 以获取如何实现自定义卡片类的示例：
+注册自定义协议解析器，寻卡时自动切换：
+
+```python
+from nfctester import ParserRegistry
+from nfctester.parsers.base_parser import BaseParser, ParsedFrame
+
+@ParserRegistry.register(atqa=0x1234, sak=0x56, name="My Custom Protocol")
+class MyProtocolParser(BaseParser):
+    def can_parse(self, data: list[int]) -> bool:
+        return len(data) > 0 and data[0] == 0xAA
+
+    def parse(self, data: list[int]) -> ParsedFrame:
+        # 解析 TX 命令
+        ...
+
+    def parse_rx(self, data: list[int], tx: list[int] | None = None) -> ParsedFrame | None:
+        # 解析 RX 响应
+        ...
+```
+
+### 5. 自定义卡片注册 (CardRegistry)
 
 ```python
 from nfctester.registry import CardRegistry
@@ -220,14 +232,16 @@ class MyCustomCard(BaseCard):
     ...
 ```
 
-### 5. 查看已注册的组件
+### 6. 查看已注册的组件
 
 ```python
 from nfctester.registry import TransportRegistry, CardReaderRegistry, CardRegistry
+from nfctester.parsers.registry import ParserRegistry
 
 print("Transports:", TransportRegistry.list())
 print("Readers:", CardReaderRegistry.list())
 print("Cards:", CardRegistry.list())
+print("Parsers:", ParserRegistry.list())
 ```
 
 更多示例见 [examples/](examples/) 目录。
@@ -265,6 +279,3 @@ uv run pytest -m ""
 ## 📄 开源协议
 
 本项目基于 **Apache License 2.0** 协议开源。详见 [LICENSE](LICENSE) 文件。
-
----
-*本README由 Gemini 3 Flash 生成*

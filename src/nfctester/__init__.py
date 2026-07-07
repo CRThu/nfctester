@@ -7,6 +7,7 @@ from .registry import (
     session,
     load_entry_points,
 )
+from .parsers.registry import ParserRegistry
 from .hardware.serial_transport import SerialTransport
 from .drivers.card_reader import CardInfo, TransceiveBits
 from .drivers.pn532_hsu import PN532_HSU
@@ -20,6 +21,7 @@ __all__ = [
     "TransportRegistry",
     "CardReaderRegistry",
     "CardRegistry",
+    "ParserRegistry",
     "Session",
     "session",
     "SerialTransport",

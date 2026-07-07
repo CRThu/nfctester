@@ -1,5 +1,6 @@
 from .table_parser import TableParser
 from .base_parser import ParsedField, ParsedFrame
+from .registry import ParserRegistry
 
 
 def _page(b): return f"Page {b[0]} (byte offset {b[0] * 4})"
@@ -8,6 +9,9 @@ def _pwd(b): return "4-byte password"
 def _pack(b): return "2-byte password ACK"
 
 
+@ParserRegistry.register(atqa=0x0044, sak=0x00, name="NFC Forum Type 2 Tag")
+@ParserRegistry.register(atqa=0x0044, sak=0x08, name="MIFARE Ultralight")
+@ParserRegistry.register(atqa=0x0044, sak=0x20, name="MIFARE Plus")
 class T2TParser(TableParser):
     """NFC Forum Type 2 Tag 指令层解析器"""
 

@@ -69,11 +69,23 @@ class CardReader(ABC):
 
     # --- 寻卡 ---
 
-    @abstractmethod
     def active(self) -> CardInfo | None:
         """
         寻卡操作（REQA → anticoll → SELECT），检测并激活卡片。
+        寻卡成功后自动根据 ATQA/SAK 切换协议解析器。
         :return: CardInfo 或 None。
+        """
+        info = self._do_active()
+        if info:
+            from nfctester.trace import trace
+            atqa = int.from_bytes(info.atq, "little")
+            trace.set_parser(atqa, info.sak)
+        return info
+
+    @abstractmethod
+    def _do_active(self) -> CardInfo | None:
+        """
+        子类实现实际的寻卡逻辑。
         """
         pass
 
