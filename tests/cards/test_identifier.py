@@ -19,10 +19,10 @@ class TestParserRegistry:
         cls = ParserRegistry.get(0x0044, 0x00)
         assert cls is T2TParser
 
-    def test_ultralight_uses_t2t_parser(self):
-        from nfctester.parsers.t2t_parser import T2TParser
+    def test_mifare_classic_7byte_uid(self):
+        from nfctester.parsers.mifare_classic_parser import MifareClassicParser
         cls = ParserRegistry.get(0x0044, 0x08)
-        assert cls is T2TParser
+        assert cls is MifareClassicParser
 
     def test_no_match(self):
         cls = ParserRegistry.get(0xFFFF, 0xFF)

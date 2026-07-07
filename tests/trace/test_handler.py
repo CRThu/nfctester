@@ -107,7 +107,7 @@ class TestRXParsing:
         h(rx=b'\x01\x02\x03\x04')
         assert h.logger_func.call_count == 2
         rx_msg = h.logger_func.call_args_list[1][0][0]
-        assert "Page Data" in rx_msg
+        assert "PAGE DATA" in rx_msg
 
     def test_rx_unknown_data_falls_back_to_raw(self):
         from nfctester.parsers import T2TParser

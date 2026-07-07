@@ -8,6 +8,7 @@ def _pay(b): return f"{len(b)} bytes"
 
 
 @ParserRegistry.register(atqa=0x0004, sak=0x08, name="MIFARE Classic 1K")
+@ParserRegistry.register(atqa=0x0044, sak=0x08, name="MIFARE Classic 1K (7-byte UID)")
 @ParserRegistry.register(atqa=0x0002, sak=0x18, name="MIFARE Classic 4K")
 @ParserRegistry.register(atqa=0x0004, sak=0x18, name="MIFARE Classic 4K (alt)")
 class MifareClassicParser(TableParser):
@@ -25,7 +26,6 @@ class MifareClassicParser(TableParser):
     CMD_TABLE = {
         0x30: ("READ",      [("Block Number", 1, _blk)]),
         0xA0: ("WRITE",     [("Block Number", 1, _blk), ("Data", 16, _pay)]),
-        0xA2: ("WRITE",     [("Block Number", 1, _blk), ("Data",  4, _pay)]),
         0x50: ("HALT",      []),
         0x60: ("AUTH_A",    [("Block Number", 1, _blk)]),
         0x61: ("AUTH_B",    [("Block Number", 1, _blk)]),
@@ -49,7 +49,7 @@ class MifareClassicParser(TableParser):
         # READ 响应：16 字节 block 数据
         if tx and tx[0] == 0x30 and len(data) == 16:
             return ParsedFrame(
-                raw=data, label="Block Data",
+                raw=data, label="BLOCK DATA",
                 fields=[ParsedField("Data", data, 0, f"{len(data)} bytes")]
             )
         return None

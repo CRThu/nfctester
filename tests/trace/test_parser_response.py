@@ -27,7 +27,7 @@ class TestT2TParserParseRx:
         p = T2TParser()
         frame = p.parse_rx(b'\x01\x02\x03\x04', tx=b'\x30\x00')
         assert frame is not None
-        assert frame.label == "Page Data"
+        assert frame.label == "PAGE DATA"
         assert "4 bytes" in frame.fields[0].description
 
     def test_parse_rx_read_data_16_bytes(self):
@@ -35,7 +35,7 @@ class TestT2TParserParseRx:
         data = bytes(16)
         frame = p.parse_rx(data, tx=b'\x30\x00')
         assert frame is not None
-        assert frame.label == "Page Data"
+        assert frame.label == "PAGE DATA"
         assert "16 bytes" in frame.fields[0].description
 
     def test_parse_rx_read_sig(self):
@@ -43,7 +43,7 @@ class TestT2TParserParseRx:
         data = bytes(64)
         frame = p.parse_rx(data, tx=b'\x3C\x00')
         assert frame is not None
-        assert frame.label == "ECC Signature"
+        assert frame.label == "ECC SIGNATURE"
         assert "64 bytes" in frame.fields[0].description
 
     def test_parse_rx_pwd_auth_pack(self):
@@ -91,7 +91,7 @@ class TestMifareClassicParserParseRx:
         data = bytes(16)
         frame = p.parse_rx(data, tx=b'\x30\x04')
         assert frame is not None
-        assert frame.label == "Block Data"
+        assert frame.label == "BLOCK DATA"
         assert "16 bytes" in frame.fields[0].description
 
     def test_parse_rx_write_ack_with_tx(self):
