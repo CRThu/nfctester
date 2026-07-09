@@ -41,7 +41,7 @@ class Type2Tag(BaseTag):
         if not res.data:
             raise RuntimeError(f"Type 2 Tag write_page(0x{page_addr:02X}) failed: No response from card")
         if res.data != [0x0A]:
-            raise RuntimeError(f"Type 2 Tag write_page(0x{page_addr:02X}) failed: NAK(0x{bytes(res.data).hex(' ').upper()}) from card")
+            raise RuntimeError(f"Type 2 Tag write_page(0x{page_addr:02X}) failed: NAK(0x{bytes(res.data).hex(' ').upper()}) [{res.bits} bits] from card")
         
     def read_ndef(self) -> dict:
         """

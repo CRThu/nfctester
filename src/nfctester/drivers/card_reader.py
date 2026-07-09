@@ -13,7 +13,7 @@ class CardInfo:
 @dataclass
 class TransceiveBits:
     """收发结果"""
-    data: list[int] | None
+    data: list[int]
     bits: int  # 最后字节有效位数，0 = 整字节有效
 
 

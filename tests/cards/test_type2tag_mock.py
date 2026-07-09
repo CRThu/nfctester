@@ -22,7 +22,7 @@ def test_t2t_read_page(mock_reader, tag):
 
 def test_t2t_read_page_no_response(mock_reader, tag):
     """验证 read_page 在无响应时抛出异常"""
-    mock_reader.transceive.return_value = TransceiveBits(data=None, bits=0)
+    mock_reader.transceive.return_value = TransceiveBits(data=[], bits=0)
 
     with pytest.raises(RuntimeError):
         tag.read_page(0x04)
@@ -59,7 +59,7 @@ def test_t2t_write_page_nak(mock_reader, tag):
 
 def test_t2t_write_page_no_response(mock_reader, tag):
     """验证 write_page 在无响应时抛出异常"""
-    mock_reader.transceive.return_value = TransceiveBits(data=None, bits=0)
+    mock_reader.transceive.return_value = TransceiveBits(data=[], bits=0)
 
     with pytest.raises(RuntimeError):
         tag.write_page(0x04, [0xDE, 0xAD, 0xBE, 0xEF])

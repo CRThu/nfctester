@@ -71,9 +71,9 @@ class NTAG224(Type2Tag):
         if not res.data:
             raise PermissionError("Auth Step 1 failed: No response from tag")
         if res.data[0] != self.CMD_PWD_AUTH_A_RES:
-            raise PermissionError(f"Auth Step 1 failed: Expected first byte 0x{self.CMD_PWD_AUTH_A_RES:02X}, got 0x{res.data[0]:02X} (response: {bytes(res.data).hex()})")
+            raise PermissionError(f"Auth Step 1 failed: Expected first byte 0x{self.CMD_PWD_AUTH_A_RES:02X}, got 0x{res.data[0]:02X} [{res.bits} bits] (response: {bytes(res.data).hex()})")
         if len(res.data) != 17:
-            raise PermissionError(f"Auth Step 1 failed: Expected 17 bytes (1 header + 16 ek(RndB)), got {len(res.data)} bytes (response: {bytes(res.data).hex()})")
+            raise PermissionError(f"Auth Step 1 failed: Expected 17 bytes (1 header + 16 ek(RndB)), got {len(res.data)} bytes [{res.bits} bits] (response: {bytes(res.data).hex()})")
 
         ek_rndb = bytes(res.data[1:])
         trace.debug(f"{'Received ek(RndB)':<25}: {ek_rndb.hex(' ').upper()}")
@@ -109,9 +109,9 @@ class NTAG224(Type2Tag):
         if not res.data:
             raise PermissionError("Auth Step 2 failed: No response from tag")
         if res.data[0] != self.CMD_PWD_AUTH_B_RES:
-            raise PermissionError(f"Auth Step 2 failed: Expected first byte 0x{self.CMD_PWD_AUTH_B_RES:02X}, got 0x{res.data[0]:02X} (response: {bytes(res.data).hex()})")
+            raise PermissionError(f"Auth Step 2 failed: Expected first byte 0x{self.CMD_PWD_AUTH_B_RES:02X}, got 0x{res.data[0]:02X} [{res.bits} bits] (response: {bytes(res.data).hex()})")
         if len(res.data) != 17:
-            raise PermissionError(f"Auth Step 2 failed: Expected 17 bytes (1 header + 16 ek(RndA')), got {len(res.data)} bytes (response: {bytes(res.data).hex()})")
+            raise PermissionError(f"Auth Step 2 failed: Expected 17 bytes (1 header + 16 ek(RndA')), got {len(res.data)} bytes [{res.bits} bits] (response: {bytes(res.data).hex()})")
 
         ek_rnda_prime = bytes(res.data[1:])
         trace.debug(f"{'Received ek(RndA\')':<25}: {ek_rnda_prime.hex(' ').upper()}")

@@ -33,7 +33,7 @@ def test_mifare_auth_keyb(mock_reader, card):
 
 def test_mifare_read_block(mock_reader, card):
     """验证 read_block 生成的命令字节"""
-    mock_reader.active.return_value = CardInfo(uid=UID, atq=[0x00, 0x44], sak=0x08)
+    mock_reader.active.return_value = CardInfo(uid=UID, atq=[0x44, 0x00], sak=0x08)
     expected_data = list(range(16))
     mock_reader.transceive.return_value = TransceiveBits(data=expected_data, bits=0)
 
@@ -46,7 +46,7 @@ def test_mifare_read_block(mock_reader, card):
 
 def test_mifare_write_block(mock_reader, card):
     """验证 write_block 生成的命令字节"""
-    mock_reader.active.return_value = CardInfo(uid=UID, atq=[0x00, 0x44], sak=0x08)
+    mock_reader.active.return_value = CardInfo(uid=UID, atq=[0x44, 0x00], sak=0x08)
     data = list(range(16))
     mock_reader.transceive.return_value = TransceiveBits(data=[0x00], bits=0)
 
@@ -60,7 +60,7 @@ def test_mifare_write_block(mock_reader, card):
 
 def test_mifare_write_block_invalid_length(mock_reader, card):
     """验证 write_block 对非法长度数据抛出异常"""
-    mock_reader.active.return_value = CardInfo(uid=UID, atq=[0x00, 0x44], sak=0x08)
+    mock_reader.active.return_value = CardInfo(uid=UID, atq=[0x44, 0x00], sak=0x08)
 
     with pytest.raises(ValueError):
         card.write_block(BLOCK_ADDR, [0x00] * 10)
@@ -68,7 +68,7 @@ def test_mifare_write_block_invalid_length(mock_reader, card):
 
 def test_mifare_increment_block(mock_reader, card):
     """验证 increment_block 生成的命令字节"""
-    mock_reader.active.return_value = CardInfo(uid=UID, atq=[0x00, 0x44], sak=0x08)
+    mock_reader.active.return_value = CardInfo(uid=UID, atq=[0x44, 0x00], sak=0x08)
     mock_reader.transceive.return_value = TransceiveBits(data=[0x00], bits=0)
 
     result = card.increment_block(BLOCK_ADDR, 500)
@@ -81,7 +81,7 @@ def test_mifare_increment_block(mock_reader, card):
 
 def test_mifare_decrement_block(mock_reader, card):
     """验证 decrement_block 生成的命令字节"""
-    mock_reader.active.return_value = CardInfo(uid=UID, atq=[0x00, 0x44], sak=0x08)
+    mock_reader.active.return_value = CardInfo(uid=UID, atq=[0x44, 0x00], sak=0x08)
     mock_reader.transceive.return_value = TransceiveBits(data=[0x00], bits=0)
 
     result = card.decrement_block(BLOCK_ADDR, 200)
@@ -94,7 +94,7 @@ def test_mifare_decrement_block(mock_reader, card):
 
 def test_mifare_restore_block(mock_reader, card):
     """验证 restore_block 生成的命令字节"""
-    mock_reader.active.return_value = CardInfo(uid=UID, atq=[0x00, 0x44], sak=0x08)
+    mock_reader.active.return_value = CardInfo(uid=UID, atq=[0x44, 0x00], sak=0x08)
     mock_reader.transceive.return_value = TransceiveBits(data=[0x00], bits=0)
 
     result = card.restore_block(BLOCK_ADDR)
@@ -106,7 +106,7 @@ def test_mifare_restore_block(mock_reader, card):
 
 def test_mifare_transfer_block(mock_reader, card):
     """验证 transfer_block 生成的命令字节"""
-    mock_reader.active.return_value = CardInfo(uid=UID, atq=[0x00, 0x44], sak=0x08)
+    mock_reader.active.return_value = CardInfo(uid=UID, atq=[0x44, 0x00], sak=0x08)
     mock_reader.transceive.return_value = TransceiveBits(data=[0x00], bits=0)
 
     result = card.transfer_block(BLOCK_ADDR)
@@ -118,7 +118,7 @@ def test_mifare_transfer_block(mock_reader, card):
 
 def test_mifare_uid_cached(mock_reader, card):
     """验证 uid 只获取一次（通过 authenticate 触发 _ensure_uid）"""
-    mock_reader.active.return_value = CardInfo(uid=UID, atq=[0x00, 0x44], sak=0x08)
+    mock_reader.active.return_value = CardInfo(uid=UID, atq=[0x44, 0x00], sak=0x08)
     mock_reader.transceive.return_value = TransceiveBits(data=[0x00] * 16, bits=0)
 
     card.authenticate(0x04, KEY, key_type=0x60)

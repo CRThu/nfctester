@@ -42,7 +42,7 @@ def test_ntag_auth_invalid_password_length(ntag):
 
 def test_ntag_auth_no_response(mock_reader, ntag):
     """验证认证失败（NAK）时抛出 PermissionError"""
-    mock_reader.transceive.return_value = TransceiveBits(data=None, bits=0)
+    mock_reader.transceive.return_value = TransceiveBits(data=[], bits=0)
 
     with pytest.raises(PermissionError):
         ntag.auth([0x12, 0x34, 0x56, 0x78])

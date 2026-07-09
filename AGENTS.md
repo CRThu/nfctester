@@ -20,7 +20,7 @@
 *   **CardReader ABC 接口**（`card_reader.py`）:
     *   **数据结构**:
         *   `CardInfo`: 寻卡结果数据类，包含 `uid` (list[int])、`atq` (list[int])、`sak` (int)。仅包含硬件真实数据，不含推测信息。
-        *   `TransceiveBits`: 收发结果数据类，包含 `data` (list[int] | None) 和 `bits` (int)（最后字节有效位数，0 = 整字节有效）。
+        *   `TransceiveBits`: 收发结果数据类，包含 `data` (list[int]) 和 `bits` (int)（最后字节有效位数，0 = 整字节有效）。失败时返回空列表 `data=[]`。
     *   **生命周期**: `open()` 初始化硬件，`close()` 释放资源。
     *   **RF 控制**: `rf_field` 属性（getter/setter），开关物理天线驱动。
     *   **寻卡**: `active()` 模板方法（基类实现），内部调用子类 `_do_active()` 执行 REQA → anticoll → SELECT，寻卡成功后自动根据 ATQA/SAK 调用 `trace.set_parser()` 切换协议解析器。驱动子类只需实现 `_do_active()`。

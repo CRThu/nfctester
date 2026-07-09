@@ -219,7 +219,7 @@ class PN532_HSU(CardReader):
             nb_targets = res[1]
             if nb_targets > 0:
                 uid = list(res[7:7+res[6]])
-                atq = list(res[3:5])
+                atq = list(res[3:5][::-1])  # PN532 返回 MSB first，反转为 LSB first
                 sak = res[5]
                 trace.debug(f"{'uid':<12}: {bytes(uid).hex(' ').upper()}")
                 trace.debug(f"{'atq':<12}: {bytes(atq).hex(' ').upper()}")
@@ -277,7 +277,7 @@ class PN532_HSU(CardReader):
                 else:
                     err_msg = self.PN532_ERRORS.get(res[1], "未知错误")
                     self.trace.warning(f"InDataExchange 返回错误: 0x{res[1]:02X} ({err_msg})")
-            return TransceiveBits(data=None, bits=0)
+            return TransceiveBits(data=[], bits=0)
         else:
             # InCommunicateThru: 透传模式
             
@@ -309,4 +309,4 @@ class PN532_HSU(CardReader):
                 else:
                     err_msg = self.PN532_ERRORS.get(res[1], "未知错误")
                     self.trace.warning(f"InCommunicateThru 返回错误: 0x{res[1]:02X} ({err_msg})")
-                    return TransceiveBits(data=None, bits=last_bits)
+                    return TransceiveBits(data=[], bits=last_bits)

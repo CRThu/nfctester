@@ -51,7 +51,7 @@ def card_reader(request):
 def mock_reader():
     """提供预配置的 mock CardReader，用于单元测试。"""
     reader = MagicMock()
-    reader.active.return_value = CardInfo(uid=[0x01, 0x02, 0x03, 0x04], atq=[0x00, 0x44], sak=0x08)
+    reader.active.return_value = CardInfo(uid=[0x01, 0x02, 0x03, 0x04], atq=[0x44, 0x00], sak=0x08)
     reader.mf_auth.return_value = True
     type(reader).mf_crypto = MagicMock(return_value=False)
     reader.transceive.return_value = TransceiveBits(data=[0x00], bits=0)

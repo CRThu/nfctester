@@ -367,7 +367,7 @@ class CLRC663(CardReader):
         if not self._wait_irq(self.IRQ0_RX):
             self._write_reg(self.REG_COMMAND, self.CMD_IDLE)
             self._flush_fifo()
-            return TransceiveBits(data=None, bits=0)
+            return TransceiveBits(data=[], bits=0)
 
         fifo_len = self._read_reg(self.REG_FIFO_LENGTH) or 0
         response = self._read_fifo(fifo_len) if fifo_len > 0 else b''

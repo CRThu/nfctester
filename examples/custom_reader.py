@@ -66,4 +66,4 @@ class ACR122UReader(CardReader):
         frame = bytes([0xFF, 0x00, 0x00, 0x00, len(raw)]) + raw
         self.transport.write(frame)
         res = self.transport.read(262)
-        return TransceiveBits(data=list(res) if res else None, bits=0)
+        return TransceiveBits(data=list(res) if res else [], bits=0)

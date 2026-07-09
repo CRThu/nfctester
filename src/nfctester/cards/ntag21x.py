@@ -48,11 +48,11 @@ class NTAG21x(Type2Tag):
         res = self.transceive(cmd)
         
         # 3. 验证响应
-        if res.data is None or len(res.data) == 0:
+        if not res.data:
             raise PermissionError("Authentication failed: No response (NAK)")
 
         # NTAG21x 认证成功会返回 2 字节的 PACK
         if len(res.data) == 2:
             return res.data
         else:
-            raise PermissionError(f"Authentication failed: Unexpected response length {len(res.data)}")
+            raise PermissionError(f"Authentication failed: Unexpected response length {len(res.data)} [{res.bits} bits]")

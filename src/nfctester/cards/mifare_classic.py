@@ -46,7 +46,7 @@ class MifareClassicCard(BaseCard):
             raise ValueError("value must be a 32-bit unsigned integer")
         cmd = [self.CMD_INCREMENT, block_addr] + list(value.to_bytes(4, "little"))
         res = self.reader.transceive(cmd)
-        return res.data is not None
+        return bool(res.data)
 
     def decrement_block(self, block_addr: int, value: int) -> bool:
         """对块进行递减操作"""
@@ -54,19 +54,19 @@ class MifareClassicCard(BaseCard):
             raise ValueError("value must be a 32-bit unsigned integer")
         cmd = [self.CMD_DECREMENT, block_addr] + list(value.to_bytes(4, "little"))
         res = self.reader.transceive(cmd)
-        return res.data is not None
+        return bool(res.data)
 
     def restore_block(self, block_addr: int) -> bool:
         """恢复块的临时值"""
         cmd = [self.CMD_RESTORE, block_addr]
         res = self.reader.transceive(cmd)
-        return res.data is not None
+        return bool(res.data)
 
     def transfer_block(self, block_addr: int) -> bool:
         """将临时值写回块"""
         cmd = [self.CMD_TRANSFER, block_addr]
         res = self.reader.transceive(cmd)
-        return res.data is not None
+        return bool(res.data)
 
     def read_block(self, block_addr: int) -> list[int]:
         """读取块数据"""
@@ -80,4 +80,4 @@ class MifareClassicCard(BaseCard):
             raise ValueError("Data must be 16 bytes")
         cmd = [self.CMD_WRITE, block_addr] + list(data)
         res = self.reader.transceive(cmd)
-        return res.data is not None
+        return bool(res.data)
