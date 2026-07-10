@@ -1,4 +1,4 @@
-"""TraceManager 测试: set_level, set_layer, set_parse, add_sink/remove_sink, _filter"""
+"""TraceManager 测试: 属性控制, set_parse, add_sink/remove_sink, _filter"""
 from unittest.mock import MagicMock, patch
 from nfctester.trace.manager import TraceManager
 
@@ -7,35 +7,6 @@ def _make_manager(**env_overrides):
     with patch.dict("os.environ", env_overrides):
         return TraceManager()
 
-
-class TestSetLevel:
-
-    def test_set_level_updates_min_level(self):
-        m = _make_manager()
-        m.set_level("DEBUG")
-        assert m._min_level_name == "DEBUG"
-
-    def test_set_level_is_case_insensitive(self):
-        m = _make_manager()
-        m.set_level("error")
-        assert m._min_level_name == "ERROR"
-
-
-class TestSetLayer:
-
-    def test_set_layer_enable(self):
-        m = _make_manager()
-        m.set_layer("driver", enable=True)
-        assert m._layer_on["driver"] is True
-
-    def test_set_layer_disable(self):
-        m = _make_manager(NFC_TRACE="driver")
-        m.set_layer("driver", enable=False)
-        assert m._layer_on["driver"] is False
-
-    def test_set_layer_unknown_name_ignored(self):
-        m = _make_manager()
-        m.set_layer("UNKNOWN", enable=True)
 
 
 class TestSetParse:
@@ -133,17 +104,17 @@ class TestPropertyControl:
 
     def test_getattr_layer(self):
         m = _make_manager()
-        assert m.driver is False
-        assert m.protocol is False
+        assert not m.filter.driver
+        assert m.filter.protocol
 
     def test_setattr_layer(self):
         m = _make_manager()
-        m.driver = True
+        m.filter.driver = True
         assert m._layer_on["driver"] is True
 
     def test_setattr_level(self):
         m = _make_manager()
-        m.level = "error"
+        m.filter.level = "error"
         assert m._min_level_name == "ERROR"
 
 
@@ -169,9 +140,9 @@ class TestDefaultStates:
         m = _make_manager()
         assert m._layer_on["debug"] is False
 
-    def test_protocol_off_by_default(self):
+    def test_protocol_on_by_default(self):
         m = _make_manager()
-        assert m._layer_on["protocol"] is False
+        assert m._layer_on["protocol"] is True
 
     def test_min_level_is_warning(self):
         m = _make_manager()
@@ -180,13 +151,13 @@ class TestDefaultStates:
 
 class TestEnvVarParsing:
 
-    def test_nfc_trace_enables_layers(self):
-        m = _make_manager(NFC_TRACE="driver,protocol")
+    def test_nfc_trace_layer_enables_layers(self):
+        m = _make_manager(NFC_TRACE_LAYER="driver,protocol")
         assert m._layer_on["driver"] is True
         assert m._layer_on["protocol"] is True
 
-    def test_nfc_trace_all(self):
-        m = _make_manager(NFC_TRACE="all")
+    def test_nfc_trace_layer_all(self):
+        m = _make_manager(NFC_TRACE_LAYER="all")
         for name in ["driver", "debug", "protocol", "warning", "error", "app"]:
             assert m._layer_on[name] is True
 
@@ -197,11 +168,11 @@ class TestEnvVarParsing:
 
 class TestFilterIntersection:
 
-    def test_protocol_on_level_trace_passes(self):
-        """Protocol layer (15) >= trace level (5) → should pass"""
+    def test_protocol_on_level_driver_passes(self):
+        """Protocol layer (15) >= driver level (5) → should pass"""
         m = _make_manager()
         m._layer_on["protocol"] = True
-        m._min_level_name = "TRACE"
+        m._min_level_name = "DRIVER"
         record = {"extra": {"layer": "protocol"}, "level": MagicMock(no=15)}
         assert m._filter(record) is True
 
@@ -213,11 +184,11 @@ class TestFilterIntersection:
         record = {"extra": {"layer": "protocol"}, "level": MagicMock(no=15)}
         assert m._filter(record) is False
 
-    def test_driver_on_level_trace_passes(self):
-        """Driver layer (5) >= trace level (5) → should pass"""
+    def test_driver_on_level_driver_passes(self):
+        """Driver layer (5) >= driver level (5) → should pass"""
         m = _make_manager()
         m._layer_on["driver"] = True
-        m._min_level_name = "TRACE"
+        m._min_level_name = "DRIVER"
         record = {"extra": {"layer": "driver"}, "level": MagicMock(no=5)}
         assert m._filter(record) is True
 
@@ -274,19 +245,19 @@ class TestLevelProperty:
 
     def test_getattr_level_returns_string(self):
         m = _make_manager()
-        assert m.level == "warning"
+        assert m.filter.level == "warning"
 
     def test_setattr_level_with_string(self):
         m = _make_manager()
-        m.level = "error"
+        m.filter.level = "error"
         assert m._min_level_name == "ERROR"
 
     def test_setattr_level_with_int(self):
         m = _make_manager()
-        m.level = 40
+        m.filter.level = 40
         assert m._min_level_name == "ERROR"
 
     def test_setattr_level_case_insensitive(self):
         m = _make_manager()
-        m.level = "DEBUG"
+        m.filter.level = "DEBUG"
         assert m._min_level_name == "DEBUG"

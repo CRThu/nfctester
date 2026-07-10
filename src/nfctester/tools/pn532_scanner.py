@@ -17,9 +17,9 @@ def run_scanner():
         # 获取并显示固件版本
         version = reader.get_version()
         if version:
-            trace.success(f"检测到 PN532 设备, 固件版本: {version.hex(' ').upper()}")
+            trace.app(f"检测到 PN532 设备, 固件版本: {version.hex(' ').upper()}")
         
-        trace.info("开始循环寻卡 (按 Ctrl+C 退出)...")
+        trace.debug("开始循环寻卡 (按 Ctrl+C 退出)...")
         while True:
             # 寻卡
             card_info = reader.active()
@@ -27,7 +27,7 @@ def run_scanner():
                 uid = card_info.uid.hex(' ').upper()
                 atq = card_info.atq.hex(' ').upper()
                 sak = card_info.sak
-                trace.success(f"发现卡片! UID: {uid} | ATQ: {atq} | SAK: 0x{sak:02X}")
+                trace.app(f"发现卡片! UID: {uid} | ATQ: {atq} | SAK: 0x{sak:02X}")
             # 降低轮询频率
             time.sleep(0.5)
 
@@ -55,7 +55,7 @@ def run_scanner():
             # time.sleep(0.5)
 
     except KeyboardInterrupt:
-        trace.info("扫描已停止。")
+        trace.debug("扫描已停止。")
     except Exception as e:
         trace.error(f"运行过程中发生错误: {e}")
     finally:

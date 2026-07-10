@@ -9,11 +9,35 @@ from nfctester.parsers import PN532HSUParser
 LAYER_DEFS = {
     "driver":   (5,   False),
     "debug":    (10,  False),
-    "protocol": (15,  False),
+    "protocol": (15,  True),
     "warning":  (30,  True),
     "error":    (40,  True),
     "app":      (50,  True),
 }
+
+
+class FilterProxy:
+    """过滤器代理：trace.filter.driver / trace.filter.level 控制层开关和级别"""
+    __slots__ = ("_manager",)
+
+    def __init__(self, manager):
+        object.__setattr__(self, "_manager", manager)
+
+    def __setattr__(self, name, value):
+        if name in LAYER_DEFS:
+            self._manager._layer_on[name] = bool(value)
+            return
+        if name == "level":
+            self._manager._set_level(value)
+            return
+        raise AttributeError(f"'FilterProxy' has no attribute '{name}'")
+
+    def __getattr__(self, name):
+        if name in LAYER_DEFS:
+            return self._manager._layer_on.get(name, False)
+        if name == "level":
+            return self._manager._min_level_name.lower()
+        raise AttributeError(f"'FilterProxy' has no attribute '{name}'")
 
 
 def trace_format(record):
@@ -63,7 +87,7 @@ class TraceManager:
             self._layer_on[name] = default
 
         # 5. 从环境变量覆盖
-        env_on = os.getenv("NFC_TRACE", "")
+        env_on = os.getenv("NFC_TRACE_LAYER", "")
         if env_on:
             for name in env_on.split(","):
                 name = name.strip().lower()
@@ -77,48 +101,24 @@ class TraceManager:
         self._min_level_name = os.getenv("NFC_TRACE_LEVEL", "warning").upper()
         self._reconfigure()
 
-    # --- 属性控制 ---
+    # --- filter 代理 ---
 
-    def __setattr__(self, name, value):
-        # 内部属性直接设置
-        if name.startswith("_"):
-            super().__setattr__(name, value)
-            return
+    @property
+    def filter(self) -> FilterProxy:
+        return FilterProxy(self)
 
-        # level 属性
-        if name == "level":
-            if isinstance(value, int):
-                # 数字 → 找最近的 level 名
-                self._min_level_name = self._level_no_to_name(value).upper()
-            else:
-                self._min_level_name = str(value).upper()
-            self._reconfigure()
-            return
-
-        # 层开关属性
-        if name in LAYER_DEFS:
-            self._layer_on[name] = bool(value)
-            return
-
-        # 其他属性
-        super().__setattr__(name, value)
-
-    def __getattr__(self, name):
-        # 层开关属性
-        if name in LAYER_DEFS:
-            return self._layer_on.get(name, False)
-
-        # level 属性
-        if name == "level":
-            return self._min_level_name.lower()
-
-        raise AttributeError(f"'TraceManager' has no attribute '{name}'")
+    def _set_level(self, value):
+        if isinstance(value, int):
+            self._min_level_name = self._level_no_to_name(value).upper()
+        else:
+            self._min_level_name = str(value).upper()
+        self._reconfigure()
 
     def _level_no_to_name(self, no: int) -> str:
         """将数字 level 转换为 level 名"""
         mapping = {
-            5: "TRACE", 10: "DEBUG", 15: "PROTOCOL",
-            20: "INFO", 25: "SUCCESS", 30: "WARNING", 40: "ERROR", 50: "APP",
+            5: "DRIVER", 10: "DEBUG", 15: "PROTOCOL",
+            30: "WARNING", 40: "ERROR", 50: "APP",
         }
         return mapping.get(no, "WARNING")
 
@@ -140,8 +140,8 @@ class TraceManager:
 
     def _get_min_level_no(self) -> int:
         mapping = {
-            "TRACE": 5, "DEBUG": 10, "PROTOCOL": 15,
-            "INFO": 20, "SUCCESS": 25, "WARNING": 30, "ERROR": 40, "APP": 50,
+            "DRIVER": 5, "DEBUG": 10, "PROTOCOL": 15,
+            "WARNING": 30, "ERROR": 40, "APP": 50,
         }
         return mapping.get(self._min_level_name, 30)
 
@@ -177,18 +177,21 @@ class TraceManager:
         """输出到 error 层 (level=40)"""
         self.log(msg, layer="error")
 
-    # --- 层控制方法 (向后兼容) ---
+    # --- 流式层输出方法 ---
 
-    def set_level(self, level):
-        """设置通用日志输出级别 (INFO, DEBUG, ERROR等)"""
-        self._min_level_name = level.upper()
-        self._reconfigure()
+    def driver(self, **kwargs):
+        """输出到 driver 层 (level=5)"""
+        handler = self._layers.get("driver")
+        if handler:
+            handler(**kwargs)
 
-    def set_layer(self, layer_name, enable=True):
-        """开启或关闭特定层级的详细追踪 (driver/protocol)"""
-        name = layer_name.lower()
-        if name in self._layer_on:
-            self._layer_on[name] = enable
+    def protocol(self, **kwargs):
+        """输出到 protocol 层 (level=15)"""
+        handler = self._layers.get("protocol")
+        if handler:
+            handler(**kwargs)
+
+    # --- 层控制方法 ---
 
     def set_parse(self, level=1):
         """设置解析级别: 0=关闭(hex), 1=简单(hex + 摘要标签)"""

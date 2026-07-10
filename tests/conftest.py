@@ -6,10 +6,9 @@ from nfctester.registry import CardReaderRegistry
 from nfctester.drivers.card_reader import CardInfo, TransceiveBits
 
 def pytest_addoption(parser):
-    group = parser.getgroup("nfctester-trace", "CRFT Trace Logging Options")
-    group.addoption("--trace-driver", action="store_true", help="Enable driver layer tracing")
-    group.addoption("--trace-protocol", action="store_true", help="Enable protocol layer tracing")
-    group.addoption("--trace-level", action="store", default=None, help="Set minimum logging level (DEBUG, INFO, etc.)")
+    group = parser.getgroup("nfctester-trace", "Trace Logging Options")
+    group.addoption("--trace-layer", default=None, help="Enable layers (comma-separated: driver,debug,protocol,warning,error,app,all)")
+    group.addoption("--trace-level", default=None, help="Minimum log level (driver/debug/protocol/warning/error/app)")
     group.addoption("--port", default=None, help="Serial port (default: NFCTESTER_PORT env or COM4)")
     group.addoption("--reader", default=None, help="Reader type (default: NFCTESTER_READER env or clrc663)")
 
@@ -21,14 +20,20 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "ntag21x: mark tests that require NTAG21x hardware")
     config.addinivalue_line("markers", "ntag224: mark tests that require NTAG224 card hardware")
 
-    if config.getoption("--trace-driver"):
-        trace.set_layer("DRIVER", True)
-    if config.getoption("--trace-protocol"):
-        trace.set_layer("PROTOCOL", True)
+    trace_arg = config.getoption("--trace-layer")
+    if trace_arg:
+        trace.filter.level = "driver"
+        for name in trace_arg.split(","):
+            name = name.strip().lower()
+            if name == "all":
+                for layer in ["driver", "debug", "protocol", "warning", "error", "app"]:
+                    setattr(trace.filter, layer, True)
+            elif name:
+                setattr(trace.filter, name, True)
 
-    trace_level = config.getoption("--trace-level")
-    if trace_level:
-        trace.set_level(trace_level)
+    level_arg = config.getoption("--trace-level")
+    if level_arg:
+        trace.filter.level = level_arg
 
 @pytest.fixture
 def card_reader(request):

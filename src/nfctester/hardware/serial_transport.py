@@ -9,7 +9,7 @@ class SerialTransport(Transport):
     def __init__(self, port="COM20", baudrate=115200):
         try:
             self.ser = serial.Serial(port, baudrate, timeout=0.1)
-            trace.info(f"成功连接串口: {port}")
+            trace.debug(f"成功连接串口: {port}")
         except Exception as e:
             trace.error(f"无法打开串口: {e}")
             raise
@@ -26,4 +26,4 @@ class SerialTransport(Transport):
     def close(self):
         if self.ser.is_open:
             self.ser.close()
-            trace.info("串口已关闭")
+            trace.debug("串口已关闭")

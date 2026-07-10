@@ -37,14 +37,14 @@ class PN532_HSU:
         # 帧结构: 00 00 FF [LEN] [LCS] [TFI] [DATA] [DCS] 00
         frame = bytearray([0x00, 0x00, 0xFF, length, lcs, tfi]) + bytearray(data) + bytearray([dcs, 0x00])
         self.ser.write(frame)
-        trace.info(f"TX -> {frame.hex(' ').upper()}")
+        trace.debug(f"TX -> {frame.hex(' ').upper()}")
 
     def read_frame(self):
         """读取并解析回复帧"""
         # 等待 ACK (00 00 FF 00 FF 00)
         ack = self.ser.read(6)
         if len(ack) > 0:
-            trace.info(f"RX <- {ack.hex(' ').upper()} (ACK)")
+            trace.debug(f"RX <- {ack.hex(' ').upper()} (ACK)")
         
         if ack != b'\x00\x00\xff\x00\xff\x00':
             return None
@@ -61,7 +61,7 @@ class PN532_HSU:
         post = self.ser.read(1)[0]
         
         full_frame = bytearray(header) + bytearray([length, lcs, tfi]) + bytearray(data) + bytearray([dcs, post])
-        trace.info(f"RX <- {full_frame.hex(' ').upper()}")
+        trace.debug(f"RX <- {full_frame.hex(' ').upper()}")
         
         return data
 
@@ -69,17 +69,17 @@ class PN532_HSU:
         """发送唤醒序列"""
         wake_cmd = bytearray([0x55, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x03, 0xFD, 0xD4, 0x14, 0x01, 0x17, 0x00])
         self.ser.write(wake_cmd)
-        trace.info(f"TX -> {wake_cmd.hex(' ').upper()} (WAKEUP)")
+        trace.debug(f"TX -> {wake_cmd.hex(' ').upper()} (WAKEUP)")
         time.sleep(0.1)
         self.ser.flushInput()
-        trace.success("唤醒 PN532 完成")
+        trace.app("唤醒 PN532 完成")
 
     def get_firmware(self):
         """获取固件版本"""
         self.send_frame([0x02])
         res = self.read_frame()
         if res:
-            trace.success(f"PN532 固件版本: {res.hex(' ').upper()}")
+            trace.app(f"PN532 固件版本: {res.hex(' ').upper()}")
             return True
         return False
 
@@ -107,8 +107,8 @@ class PN532_HSU:
             # 根据 ATQA/SAK 查询协议名称
             # PN532 InListPassiveTarget 不返回 ATQA，仅用 SAK 查询
             name = ParserRegistry.get_name(0, sak) or "未知类型"
-            trace.success(f"发现卡片! 类型: {name}")
-            trace.info(f"UID: {uid.hex(' ').upper()} | SAK: 0x{sak:02X}")
+            trace.app(f"发现卡片! 类型: {name}")
+            trace.debug(f"UID: {uid.hex(' ').upper()} | SAK: 0x{sak:02X}")
             print("-" * 30)
             return uid, sak
         return None, None
@@ -118,7 +118,7 @@ if __name__ == "__main__":
     nfc.wakeup()
     if nfc.get_firmware():
         nfc.sam_config()
-        trace.info("开始寻卡...")
+        trace.debug("开始寻卡...")
         while True:
             nfc.poll_card()
             time.sleep(0.5) # 降低 CPU 占用

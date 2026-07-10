@@ -165,7 +165,7 @@ class CLRC663(CardReader):
         self._set_crc(True, True)
         self._modify_reg(self.REG_DRV_MODE, 0x08, 0x08)
         self._mf_crypto_active = False
-        self.trace.success("CLRC663 connected")
+        self.trace.app("CLRC663 connected")
 
     def close(self):
         try:

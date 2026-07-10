@@ -171,7 +171,7 @@ class PN532_HSU(CardReader):
         self._modify_reg(0x633C, 0x10, 0x10)
 
         self._mf_crypto_active = False
-        self.trace.success("PN532 HSU 初始化成功")
+        self.trace.app("PN532 HSU 初始化成功")
 
     def close(self):
         try:

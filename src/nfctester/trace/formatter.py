@@ -3,7 +3,7 @@ from nfctester.parsers import ParsedFrame
 import os
 
 # 简单解析模式下 hex 列的对齐宽度
-_HEX_COL_WIDTH = int(os.getenv("CRFT_TRACE_WIDTH", "48"))
+_HEX_COL_WIDTH = int(os.getenv("NFC_TRACE_HEX_WIDTH", "48"))
 
 
 class TraceFormatter:
