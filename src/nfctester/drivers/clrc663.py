@@ -338,10 +338,11 @@ class CLRC663(CardReader):
 
     # --- 数据交换 ---
 
-    def transceive(self, data: list[int], last_tx_bits: int = 0, tx_crc: bool = True, rx_crc: bool = True) -> TransceiveBits:
+    def transceive(self, data: list[int], last_tx_bits: int = 0, tx_crc: bool = True, rx_crc: bool = True, log_protocol: bool = True) -> TransceiveBits:
         """数据交换（支持位级发送 + CRC 控制）"""
         raw = bytes(data)
-        self.trace.protocol(tx=raw, tx_bits=last_tx_bits)
+        if log_protocol:
+            self.trace.protocol(tx=raw, tx_bits=last_tx_bits)
 
         use_bit_framing = last_tx_bits not in (0, 8)
         if use_bit_framing:
@@ -350,14 +351,14 @@ class CLRC663(CardReader):
         self._set_crc(tx_crc, rx_crc)
         self._write_reg(self.REG_COMMAND, self.CMD_IDLE)
         time.sleep(0.05)
-        result = self._do_transceive(raw)
+        result = self._do_transceive(raw, log_protocol=log_protocol)
 
         if use_bit_framing:
             self._modify_reg(self.REG_TX_DATA_NUM, 0x07, 0x00)
 
         return result
 
-    def _do_transceive(self, data: bytes) -> TransceiveBits:
+    def _do_transceive(self, data: bytes, log_protocol: bool = True) -> TransceiveBits:
         """底层 Transceive 执行"""
         self._flush_fifo()
         self._write_reg(self.REG_IRQ0, 0x7F)
@@ -383,5 +384,6 @@ class CLRC663(CardReader):
         if err:
             self.trace.warning(f"CLRC663 transceive error: {err}")
 
-        self.trace.protocol(rx=response, rx_bits=last_bits)
+        if log_protocol:
+            self.trace.protocol(rx=response, rx_bits=last_bits)
         return TransceiveBits(data=list(response), bits=last_bits)

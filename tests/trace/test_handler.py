@@ -257,3 +257,51 @@ class TestParseLevel2:
         h(rx=b'\x01\x02\x03\x04')
         msg = h.logger_func.call_args_list[1][0][0]
         assert "01 02 03 04" in msg
+
+
+class TestLogMethod:
+
+    def test_log_calls_logger_func(self):
+        h = _make_handler()
+        h.log("hello world")
+        h.logger_func.assert_called_once_with("hello world")
+
+
+class TestPlaintextPair:
+
+    def test_tx_with_plaintext(self):
+        h = _make_handler(parse_level=0)
+        h(tx=b'\x4D\xE3', plaintext=b'\x71\x07')
+        msg = h.logger_func.call_args[0][0]
+        assert "[encrypted]" in msg
+        assert "[decrypted]" in msg
+        assert "4D E3" in msg
+        assert "71 07" in msg
+
+    def test_rx_with_plaintext(self):
+        h = _make_handler(parse_level=0)
+        h(rx=b'\xAC\xB5', plaintext=b'\x4D\x3C')
+        msg = h.logger_func.call_args[0][0]
+        assert "[encrypted]" in msg
+        assert "[decrypted]" in msg
+        assert "AC B5" in msg
+        assert "4D 3C" in msg
+
+    def test_sink_receives_pair_event(self):
+        sink = MagicMock()
+        h = _make_handler(parse_level=0)
+        h.add_sink(sink)
+        h(tx=b'\x4D\xE3', plaintext=b'\x71\x07')
+        sink.assert_called_once()
+        event = sink.call_args[0][0]
+        assert "[encrypted]" in event.formatted
+        assert "[decrypted]" in event.formatted
+
+    def test_pair_multiline_alignment(self):
+        h = _make_handler(parse_level=0)
+        h(tx=b'\x4D\xE3\x53\x1C', plaintext=b'\x71\x07\x03\x83')
+        msg = h.logger_func.call_args[0][0]
+        lines = msg.split("\n")
+        assert len(lines) == 2
+        assert "[encrypted]" in lines[0]
+        assert "[decrypted]" in lines[1]

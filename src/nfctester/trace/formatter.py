@@ -25,3 +25,15 @@ class TraceFormatter:
         hex_str = raw.hex(' ').upper()
         bit_tag = f" [{bits} bits]" if bits not in (0, 8) else ""
         return f"{direction} {arrow}  {hex_str:<{_HEX_COL_WIDTH}} [{summary}{bit_tag}]"
+
+    @staticmethod
+    def format_encrypted_pair(direction: str, raw: bytes, plaintext: bytes, bits: int = 0) -> str:
+        """加密双行输出: [encrypted] hex + [decrypted] plaintext"""
+        arrow = "->" if direction == "TX" else "<-"
+        enc_hex = raw.hex(' ').upper()
+        dec_hex = plaintext.hex(' ').upper()
+        w = _HEX_COL_WIDTH
+        return (
+            f"{direction} {arrow}  {enc_hex:<{w}} [encrypted]\n"
+            f"{' ' * len(direction)} {' ' * len(arrow)}  {dec_hex:<{w}} [decrypted]"
+        )

@@ -255,14 +255,15 @@ class PN532_HSU(CardReader):
 
     # --- 数据交换 ---
 
-    def transceive(self, data: list[int], last_tx_bits: int = 0, tx_crc: bool = True, rx_crc: bool = True) -> TransceiveBits:
+    def transceive(self, data: list[int], last_tx_bits: int = 0, tx_crc: bool = True, rx_crc: bool = True, log_protocol: bool = True) -> TransceiveBits:
         """
         与卡片进行数据交换（支持位级发送）。
         mf_crypto 为 True 时使用 InDataExchange（硬件自动加密），
         否则使用 InCommunicateThru（透传）。
         """
         raw = bytes(data)
-        self.trace.protocol(tx=raw, tx_bits=last_tx_bits)
+        if log_protocol:
+            self.trace.protocol(tx=raw, tx_bits=last_tx_bits)
 
         if self._mf_crypto_active:
             # InDataExchange: 自动处理 Mifare Crypto1 加密
@@ -272,7 +273,8 @@ class PN532_HSU(CardReader):
             # 响应格式: 0x41 (Response), Status, [Data]
             if res and len(res) >= 2 and res[0] == 0x41:
                 if res[1] == 0x00:
-                    self.trace.protocol(rx=res[2:])
+                    if log_protocol:
+                        self.trace.protocol(rx=res[2:])
                     return TransceiveBits(data=list(res[2:]), bits=0)
                 else:
                     err_msg = self.PN532_ERRORS.get(res[1], "未知错误")
@@ -304,7 +306,8 @@ class PN532_HSU(CardReader):
             # 响应格式: 0x43 (Response), Status, [Data]
             if res and len(res) >= 2 and res[0] == 0x43:
                 if res[1] == 0x00:
-                    self.trace.protocol(rx=res[2:], rx_bits=last_bits)
+                    if log_protocol:
+                        self.trace.protocol(rx=res[2:], rx_bits=last_bits)
                     return TransceiveBits(data=list(res[2:]), bits=last_bits)
                 else:
                     err_msg = self.PN532_ERRORS.get(res[1], "未知错误")

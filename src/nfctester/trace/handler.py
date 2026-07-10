@@ -25,7 +25,7 @@ class TraceHandler:
         layer_name: str,
         logger_func: Callable[[str], None],
         parsers: list[BaseParser] = None,
-        enabled: bool = False,
+        enabled: bool = True,
         parse_level: int = 1,
     ):
         self.layer_name   = layer_name
@@ -47,21 +47,36 @@ class TraceHandler:
         if fn in self._sinks:
             self._sinks.remove(fn)
 
-    def __call__(self, tx: bytes = None, rx: bytes = None, tx_bits: int = 0, rx_bits: int = 0, flush: bool = True):
-        """处理日志输出，支持流式追加（flush=False）和立即输出（flush=True）"""
+    def log(self, msg: str):
+        """文本日志输出 (用于 app/debug 等文本层)"""
+        self.logger_func(msg)
+
+    def __call__(self, tx: bytes = None, rx: bytes = None, tx_bits: int = 0, rx_bits: int = 0, flush: bool = True, plaintext: bytes = None):
+        """处理日志输出，支持流式追加（flush=False）和立即输出（flush=True）。
+        plaintext: 当提供时，生成加密双行输出（[encrypted] + [decrypted]）。"""
         if tx:
             raw = bytes(self._tx_buffer) + tx if self._tx_buffer else tx
             self._tx_buffer.clear()
             self._last_tx = raw
             self._last_tx_bits = tx_bits
-            if flush:   self._emit("TX", raw, tx_bits)
-            else:       self._tx_buffer.extend(raw)
+            if flush:
+                if plaintext is not None:
+                    self._emit_pair("TX", raw, plaintext, tx_bits)
+                else:
+                    self._emit("TX", raw, tx_bits)
+            else:
+                self._tx_buffer.extend(raw)
 
         if rx:
             raw = bytes(self._rx_buffer) + rx if self._rx_buffer else rx
             self._rx_buffer.clear()
-            if flush:   self._emit("RX", raw, rx_bits)
-            else:       self._rx_buffer.extend(raw)
+            if flush:
+                if plaintext is not None:
+                    self._emit_pair("RX", raw, plaintext, rx_bits)
+                else:
+                    self._emit("RX", raw, rx_bits)
+            else:
+                self._rx_buffer.extend(raw)
 
     def _emit(self, direction: str, raw: bytes, bits: int = 0):
         parsed = None
@@ -74,6 +89,12 @@ class TraceHandler:
 
         self.logger_func(msg)
         self._notify_sinks(direction, raw, parsed, summary, msg)
+
+    def _emit_pair(self, direction: str, raw: bytes, plaintext: bytes, bits: int = 0):
+        """加密双行输出: [encrypted] + [decrypted]"""
+        msg = TraceFormatter.format_encrypted_pair(direction, raw, plaintext, bits)
+        self.logger_func(msg)
+        self._notify_sinks(direction, raw, None, None, msg)
 
     def _emit_tx(self, raw: bytes, bits: int = 0) -> tuple[str, ParsedFrame | None, str | None]:
         if self.parse_level == 0:
