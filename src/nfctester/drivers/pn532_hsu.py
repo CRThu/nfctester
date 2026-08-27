@@ -175,10 +175,12 @@ class PN532_HSU(CardReader):
 
     def close(self):
         try:
-            self._req(b'\x52\x00')
-        except Exception as e:
-            self.trace.error(f"下发结束指令失败: {e}")
+            if self.rf_field:
+                self._req(b'\x52\x00')
+        except Exception:
+            pass
         finally:
+            self._mf_crypto_active = False
             self.transport.close()
 
     def get_version(self) -> list[int]:
