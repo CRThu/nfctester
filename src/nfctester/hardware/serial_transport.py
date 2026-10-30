@@ -6,9 +6,9 @@ from .base import Transport
 @TransportRegistry.register("serial")
 class SerialTransport(Transport):
     """基于串口的传输实现"""
-    def __init__(self, port="COM20", baudrate=115200):
+    def __init__(self, port="COM20", baudrate=115200, timeout: float = 2.0):
         try:
-            self.ser = serial.Serial(port, baudrate, timeout=0.1)
+            self.ser = serial.Serial(port, baudrate, timeout=timeout)
             trace.debug(f"成功连接串口: {port}")
         except Exception as e:
             trace.error(f"无法打开串口: {e}")
