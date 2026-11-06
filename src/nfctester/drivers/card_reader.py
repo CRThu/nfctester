@@ -24,6 +24,37 @@ class CardReader(ABC):
     定义了上层业务逻辑（如 NFC 寻卡、加密卡交互）与底层驱动之间的契约。
     """
 
+    def __init__(self):
+        self._lazy_crc: bool = True
+        self._tx_crc: bool | None = None
+        self._rx_crc: bool | None = None
+
+    # --- 核心属性与物理硬件契约 ---
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """读卡器驱动名称 (如 'pn532', 'clrc663')。"""
+        pass
+
+    @property
+    @abstractmethod
+    def fifo_size(self) -> int:
+        """读卡器内部物理硬件 FIFO 深度 (字节)。"""
+        pass
+
+    @property
+    def lazy_crc(self) -> bool:
+        """是否启用惰性 CRC 状态缓存（避免向硬件重复写入相同状态）。默认 True。"""
+        return getattr(self, "_lazy_crc", True)
+
+    @lazy_crc.setter
+    def lazy_crc(self, enable: bool) -> None:
+        self._lazy_crc = bool(enable)
+        if not self._lazy_crc:
+            self._tx_crc = None
+            self._rx_crc = None
+
     # --- 生命周期 ---
 
     @abstractmethod

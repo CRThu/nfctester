@@ -57,9 +57,20 @@ class CLRC663(CardReader):
     }
 
     def __init__(self, transport, trace_mgr=trace):
+        super().__init__()
         self.transport = transport
         self.trace = trace_mgr
         self._mf_crypto_active = False
+
+    @property
+    def name(self) -> str:
+        """读卡器驱动名称。"""
+        return "clrc663"
+
+    @property
+    def fifo_size(self) -> int:
+        """读卡器内部物理硬件 FIFO 深度 (字节)。"""
+        return 512
 
     # --- UART 底层 ---
 
@@ -151,8 +162,14 @@ class CLRC663(CardReader):
         - TxCRCPreset (0x2C) bit 0 = TxCRCEn
         - RxCRCPreset (0x2D) bit 0 = RxCRCEn
         """
-        self._modify_reg(self.REG_TX_CRC_PRESET, 0x01, 0x01 if tx_enabled else 0x00)
-        self._modify_reg(self.REG_RX_CRC_PRESET, 0x01, 0x01 if rx_enabled else 0x00)
+        if self._lazy_crc and self._tx_crc == tx_enabled and self._rx_crc == rx_enabled:
+            return
+        if not self._lazy_crc or self._tx_crc != tx_enabled:
+            self._modify_reg(self.REG_TX_CRC_PRESET, 0x01, 0x01 if tx_enabled else 0x00)
+            self._tx_crc = tx_enabled
+        if not self._lazy_crc or self._rx_crc != rx_enabled:
+            self._modify_reg(self.REG_RX_CRC_PRESET, 0x01, 0x01 if rx_enabled else 0x00)
+            self._rx_crc = rx_enabled
 
     # --- CardReader 接口 ---
 
@@ -168,6 +185,8 @@ class CLRC663(CardReader):
         )
         if result is None:
             raise RuntimeError("CLRC663 LoadProtocol ISO14443A failed")
+        self._tx_crc = None
+        self._rx_crc = None
         self._set_crc(True, True)
         self._write_reg(self.REG_RX_THRESHOLD, 0x5C)
         self._mf_crypto_active = False
@@ -180,6 +199,9 @@ class CLRC663(CardReader):
         except Exception as e:
             self.trace.error(f"Close RF failed: {e}")
         finally:
+            self._tx_crc = None
+            self._rx_crc = None
+            self._mf_crypto_active = False
             self.transport.close()
 
     def get_version(self) -> list[int]:

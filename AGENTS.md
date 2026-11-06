@@ -22,6 +22,10 @@
         *   `CardInfo`: 寻卡结果数据类，包含 `uid` (list[int])、`atq` (list[int])、`sak` (int)。仅包含硬件真实数据，不含推测信息。
         *   `TransceiveBits`: 收发结果数据类，包含 `data` (list[int]) 和 `bits` (int)（最后字节有效位数，0 = 整字节有效）。失败时返回空列表 `data=[]`。
     *   **生命周期**: `open()` 初始化硬件，`close()` 释放资源。
+    *   **物理硬件属性**:
+        *   `name` 属性（只读）：读卡器芯片驱动名称（如 `"pn532"`, `"clrc663"`）。
+        *   `fifo_size` 属性（只读）：芯片物理 FIFO 深度常量（PN532 为 64 字节，CLRC663 为 512 字节），供上层流式分包按需计算 `max_chunk`。
+        *   `lazy_crc` 属性（读写，默认 `True`）：原生惰性 CRC 状态缓存。当 `tx_crc` 与 `rx_crc` 状态未变更时跳过底层 UART 寄存器读写，消除通信开销；置 `False` 强制每次写寄存器。
     *   **RF 控制**: `rf_field` 属性（getter/setter），开关物理天线驱动。
     *   **寻卡**: `active()` 模板方法（基类实现），内部调用子类 `_do_active()` 执行 REQA → anticoll → SELECT，寻卡成功后自动根据 ATQA/SAK 调用 `trace.set_parser()` 切换协议解析器。驱动子类只需实现 `_do_active()`。
     *   **Mifare**: `mf_crypto` 属性（读取加密引擎状态），`mf_auth(block, key_type, key, uid)`（执行 Mifare Classic 认证，成功后 `mf_crypto` 变为 True，后续 `transceive` 自动加密）。

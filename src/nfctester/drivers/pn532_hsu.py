@@ -37,10 +37,21 @@ class PN532_HSU(CardReader):
     }
 
     def __init__(self, transport, trace_mgr=trace):
+        super().__init__()
         # 初始化传输层
         self.transport = transport
         self.trace = trace_mgr
         self._mf_crypto_active = False
+
+    @property
+    def name(self) -> str:
+        """读卡器驱动名称。"""
+        return "pn532"
+
+    @property
+    def fifo_size(self) -> int:
+        """读卡器内部物理硬件 FIFO 深度 (字节)。"""
+        return 64
 
     # --- 私有辅助方法 (协议具体实现) ---
     def _send_frame(self, data: bytes):
@@ -141,8 +152,14 @@ class PN532_HSU(CardReader):
 
     def _set_crc(self, tx_enabled: bool, rx_enabled: bool):
         """配置 CRC 校验（内部使用）"""
-        self._modify_reg(0x6302, 0x80, 0x80 if tx_enabled else 0x00)
-        self._modify_reg(0x6303, 0x80, 0x80 if rx_enabled else 0x00)
+        if self._lazy_crc and self._tx_crc == tx_enabled and self._rx_crc == rx_enabled:
+            return
+        if not self._lazy_crc or self._tx_crc != tx_enabled:
+            self._modify_reg(0x6302, 0x80, 0x80 if tx_enabled else 0x00)
+            self._tx_crc = tx_enabled
+        if not self._lazy_crc or self._rx_crc != rx_enabled:
+            self._modify_reg(0x6303, 0x80, 0x80 if rx_enabled else 0x00)
+            self._rx_crc = rx_enabled
 
     # --- CardReader 接口实现 ---
 
@@ -170,6 +187,8 @@ class PN532_HSU(CardReader):
         # 配置 Initiator 模式 (CIU_Control 0x633C, bit 4)
         self._modify_reg(0x633C, 0x10, 0x10)
 
+        self._tx_crc = None
+        self._rx_crc = None
         self._mf_crypto_active = False
         self.trace.app("PN532 HSU 初始化成功")
 
@@ -180,6 +199,8 @@ class PN532_HSU(CardReader):
         except Exception:
             pass
         finally:
+            self._tx_crc = None
+            self._rx_crc = None
             self._mf_crypto_active = False
             self.transport.close()
 
