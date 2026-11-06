@@ -98,6 +98,12 @@ class CLRC663(CardReader):
             result.append(val)
         return bytes(result)
 
+    def _get_fifo_length(self) -> int:
+        """获取当前 FIFO 缓冲区的字节数（支持 512 字节大模式，组合 FIFOControl[1:0] 高位与 FIFOLength 低 8 位）"""
+        fifo_ctrl = self._read_reg(self.REG_FIFO_CONTROL) or 0
+        fifo_len_low = self._read_reg(self.REG_FIFO_LENGTH) or 0
+        return ((fifo_ctrl & 0x03) << 8) | fifo_len_low
+
     # --- 命令执行 ---
 
     def _wait_irq(self, mask: int, timeout: float = 0.5) -> bool:
@@ -126,7 +132,7 @@ class CLRC663(CardReader):
             self._write_reg(self.REG_COMMAND, self.CMD_IDLE)
             self._flush_fifo()
             return None
-        fifo_len = self._read_reg(self.REG_FIFO_LENGTH) or 0
+        fifo_len = self._get_fifo_length()
         return self._read_fifo(fifo_len) if fifo_len > 0 else b''
 
     def _check_error(self) -> str | None:
@@ -211,7 +217,7 @@ class CLRC663(CardReader):
             self._write_reg(self.REG_COMMAND, self.CMD_IDLE)
             self._flush_fifo()
             return None
-        anticoll = self._read_fifo(self._read_reg(self.REG_FIFO_LENGTH) or 0)
+        anticoll = self._read_fifo(self._get_fifo_length())
         if len(anticoll) < 5:
             self._write_reg(self.REG_COMMAND, self.CMD_IDLE)
             self._flush_fifo()
@@ -238,7 +244,7 @@ class CLRC663(CardReader):
             self._write_reg(self.REG_COMMAND, self.CMD_IDLE)
             self._flush_fifo()
             return None
-        sak_data = self._read_fifo(self._read_reg(self.REG_FIFO_LENGTH) or 0)
+        sak_data = self._read_fifo(self._get_fifo_length())
         if not sak_data:
             return None
 
@@ -277,7 +283,7 @@ class CLRC663(CardReader):
                 self._write_reg(self.REG_COMMAND, self.CMD_IDLE)
                 self._flush_fifo()
                 return None
-            atqa = self._read_fifo(self._read_reg(self.REG_FIFO_LENGTH) or 0)
+            atqa = self._read_fifo(self._get_fifo_length())
             if len(atqa) < 2:
                 return None
 
@@ -378,7 +384,7 @@ class CLRC663(CardReader):
             self._flush_fifo()
             return TransceiveBits(data=[], bits=0)
 
-        fifo_len = self._read_reg(self.REG_FIFO_LENGTH) or 0
+        fifo_len = self._get_fifo_length()
         response = self._read_fifo(fifo_len) if fifo_len > 0 else b''
 
         # 读取 RxBitCtrl (0x0C) bit[2:0] = RxLastBits
