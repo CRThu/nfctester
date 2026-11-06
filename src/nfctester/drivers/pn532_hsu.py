@@ -257,7 +257,15 @@ class PN532_HSU(CardReader):
 
     # --- 数据交换 ---
 
-    def transceive(self, data: list[int], last_tx_bits: int = 0, tx_crc: bool = True, rx_crc: bool = True, log_protocol: bool = True) -> TransceiveBits:
+    def transceive(
+        self,
+        data: list[int],
+        last_tx_bits: int = 0,
+        tx_crc: bool = True,
+        rx_crc: bool = True,
+        log_protocol: bool = True,
+        timeout: float = 0.5,
+    ) -> TransceiveBits:
         """
         与卡片进行数据交换（支持位级发送）。
         mf_crypto 为 True 时使用 InDataExchange（硬件自动加密），

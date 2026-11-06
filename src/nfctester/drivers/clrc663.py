@@ -32,6 +32,7 @@ class CLRC663(CardReader):
     REG_TX_CRC_PRESET = 0x2C
     REG_RX_CRC_PRESET = 0x2D
     REG_TX_DATA_NUM = 0x2E
+    REG_RX_THRESHOLD = 0x37
     REG_VERSION = 0x7F
 
     # --- Mifare 认证寄存器 ---
@@ -139,8 +140,7 @@ class CLRC663(CardReader):
         return None
 
     def _set_crc(self, tx_enabled: bool, rx_enabled: bool):
-        """配置 CRC（内部使用）
-
+        """配置 CRC
         CLRC663 CRC 控制位:
         - TxCRCPreset (0x2C) bit 0 = TxCRCEn
         - RxCRCPreset (0x2D) bit 0 = RxCRCEn
@@ -163,13 +163,14 @@ class CLRC663(CardReader):
         if result is None:
             raise RuntimeError("CLRC663 LoadProtocol ISO14443A failed")
         self._set_crc(True, True)
-        self._modify_reg(self.REG_DRV_MODE, 0x08, 0x08)
+        self._write_reg(self.REG_RX_THRESHOLD, 0x5C)
         self._mf_crypto_active = False
         self.trace.app("CLRC663 connected")
 
     def close(self):
         try:
-            self.rf_field = False
+            if self.transport.is_open:
+                self.rf_field = False
         except Exception as e:
             self.trace.error(f"Close RF failed: {e}")
         finally:
@@ -338,7 +339,15 @@ class CLRC663(CardReader):
 
     # --- 数据交换 ---
 
-    def transceive(self, data: list[int], last_tx_bits: int = 0, tx_crc: bool = True, rx_crc: bool = True, log_protocol: bool = True) -> TransceiveBits:
+    def transceive(
+        self,
+        data: list[int],
+        last_tx_bits: int = 0,
+        tx_crc: bool = True,
+        rx_crc: bool = True,
+        log_protocol: bool = True,
+        timeout: float = 0.5,
+    ) -> TransceiveBits:
         """数据交换（支持位级发送 + CRC 控制）"""
         raw = bytes(data)
         if log_protocol:
@@ -349,31 +358,28 @@ class CLRC663(CardReader):
             self._modify_reg(self.REG_TX_DATA_NUM, 0x07, last_tx_bits & 0x07)
 
         self._set_crc(tx_crc, rx_crc)
-        self._write_reg(self.REG_COMMAND, self.CMD_IDLE)
-        time.sleep(0.05)
-        result = self._do_transceive(raw, log_protocol=log_protocol)
+        result = self._do_transceive(raw, log_protocol=log_protocol, timeout=timeout)
 
         if use_bit_framing:
             self._modify_reg(self.REG_TX_DATA_NUM, 0x07, 0x00)
 
         return result
 
-    def _do_transceive(self, data: bytes, log_protocol: bool = True) -> TransceiveBits:
+    def _do_transceive(self, data: bytes, log_protocol: bool = True, timeout: float = 0.5) -> TransceiveBits:
         """底层 Transceive 执行"""
+        self._write_reg(self.REG_COMMAND, self.CMD_IDLE)
         self._flush_fifo()
         self._write_reg(self.REG_IRQ0, 0x7F)
         self._write_fifo(data)
         self._write_reg(self.REG_COMMAND, self.CMD_TRANSCEIVE)
 
-        if not self._wait_irq(self.IRQ0_RX):
+        if not self._wait_irq(self.IRQ0_RX, timeout=timeout):
             self._write_reg(self.REG_COMMAND, self.CMD_IDLE)
             self._flush_fifo()
             return TransceiveBits(data=[], bits=0)
 
         fifo_len = self._read_reg(self.REG_FIFO_LENGTH) or 0
         response = self._read_fifo(fifo_len) if fifo_len > 0 else b''
-
-        self._write_reg(self.REG_COMMAND, self.CMD_IDLE)
 
         # 读取 RxBitCtrl (0x0C) bit[2:0] = RxLastBits
         # 0 表示最后一个字节全部有效（即整字节），非 0 表示最后字节有效位数
@@ -383,6 +389,8 @@ class CLRC663(CardReader):
         err = self._check_error()
         if err:
             self.trace.warning(f"CLRC663 transceive error: {err}")
+
+        self._write_reg(self.REG_COMMAND, self.CMD_IDLE)
 
         if log_protocol:
             self.trace.protocol(rx=response, rx_bits=last_bits)

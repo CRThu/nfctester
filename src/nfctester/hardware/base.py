@@ -25,6 +25,14 @@ class Transport(ABC):
         """
         pass
 
+    @property
+    @abstractmethod
+    def is_open(self) -> bool:
+        """
+        检查传输通道是否处于开启状态。
+        """
+        pass
+
     @abstractmethod
     def close(self):
         """

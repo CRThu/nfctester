@@ -23,6 +23,10 @@ class SerialTransport(Transport):
     def flush_input(self):
         self.ser.reset_input_buffer()
 
+    @property
+    def is_open(self) -> bool:
+        return self.ser.is_open
+
     def close(self):
         if self.ser.is_open:
             self.ser.close()

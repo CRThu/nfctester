@@ -115,7 +115,15 @@ class CardReader(ABC):
     # --- 数据交换 ---
 
     @abstractmethod
-    def transceive(self, data: list[int], last_tx_bits: int = 0, tx_crc: bool = True, rx_crc: bool = True, log_protocol: bool = True) -> TransceiveBits:
+    def transceive(
+        self,
+        data: list[int],
+        last_tx_bits: int = 0,
+        tx_crc: bool = True,
+        rx_crc: bool = True,
+        log_protocol: bool = True,
+        timeout: float = 0.5,
+    ) -> TransceiveBits:
         """
         与卡片进行数据交换（支持位级发送）。
         当 mf_crypto 为 True 时，自动使用加密通道（如 PN532 InDataExchange）。
@@ -124,5 +132,6 @@ class CardReader(ABC):
         :param tx_crc: 是否对发送数据附加 CRC
         :param rx_crc: 是否对接收数据校验 CRC
         :param log_protocol: 是否输出 PROTOCOL 日志，默认 True。False 时由调用方自行记录
+        :param timeout: 接收超时时间 (秒)，默认 0.5s
         """
         pass
