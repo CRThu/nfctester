@@ -74,12 +74,13 @@ class CLRC663(CardReader):
 
     # --- UART 底层 ---
 
-    def _write_reg(self, addr: int, value: int):
+    def _write_reg(self, addr: int, value: int, wait_echo: bool = True):
         addr_byte = addr & 0x7F
         self.transport.write(bytes([addr_byte, value & 0xFF]))
-        echo = self.transport.read(1)
-        if echo and echo[0] != addr_byte:
-            self.trace.warning(f"UART echo mismatch: sent 0x{addr_byte:02X}, got 0x{echo[0]:02X}")
+        if wait_echo:
+            echo = self.transport.read(1)
+            if echo and echo[0] != addr_byte:
+                self.trace.warning(f"UART echo mismatch: sent 0x{addr_byte:02X}, got 0x{echo[0]:02X}")
 
     def _read_reg(self, addr: int) -> int | None:
         self.transport.write(bytes([(addr & 0x7F) | 0x80]))
@@ -121,8 +122,9 @@ class CLRC663(CardReader):
         end = time.time() + timeout
         while time.time() < end:
             irq = self._read_reg(self.REG_IRQ0)
-            if irq is not None and irq & mask:
+            if irq is not None and (irq & mask):
                 return True
+            time.sleep(0.002)
         return False
 
     def _start_command(self, cmd: int, data: bytes = b'', set_tx_num: bool = True):
@@ -175,7 +177,8 @@ class CLRC663(CardReader):
 
     def open(self):
         self.transport.flush_input()
-        self._write_reg(self.REG_COMMAND, self.CMD_SOFT_RESET)
+        # 软复位期间芯片内部重置，不返回 UART 回显，跳过回显等待以防串口阻塞超时
+        self._write_reg(self.REG_COMMAND, self.CMD_SOFT_RESET, wait_echo=False)
         time.sleep(0.05)
         self.transport.flush_input()
         self._flush_fifo()
