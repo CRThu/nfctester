@@ -50,6 +50,10 @@ class CLRC663(CardReader):
     # --- LoadProtocol 协议号 ---
     PROT_ISO14443A = 0x00
 
+    # --- UART 时序常量 (秒) ---
+    REG_IO_TIMEOUT = 0.05      # 单字节寄存器读写超时
+    IRQ_POLL_INTERVAL = 0.002  # IRQ 轮询间隔
+
     CLRC663_ERRORS = {
         0x01: "IntegErr", 0x02: "ProtErr", 0x04: "CollDet",
         0x08: "NoDataErr", 0x10: "MinFrameErr", 0x20: "FIFOOvl",
@@ -78,13 +82,15 @@ class CLRC663(CardReader):
         addr_byte = addr & 0x7F
         self.transport.write(bytes([addr_byte, value & 0xFF]))
         if wait_echo:
-            echo = self.transport.read(1)
-            if echo and echo[0] != addr_byte:
+            echo = self.transport.read(1, timeout=self.REG_IO_TIMEOUT)
+            if not echo:
+                self.trace.warning(f"UART echo timeout: reg 0x{addr_byte:02X}")
+            elif echo[0] != addr_byte:
                 self.trace.warning(f"UART echo mismatch: sent 0x{addr_byte:02X}, got 0x{echo[0]:02X}")
 
     def _read_reg(self, addr: int) -> int | None:
         self.transport.write(bytes([(addr & 0x7F) | 0x80]))
-        data = self.transport.read(1)
+        data = self.transport.read(1, timeout=self.REG_IO_TIMEOUT)
         return data[0] if data else None
 
     def _modify_reg(self, addr: int, mask: int, value: int):
@@ -119,13 +125,15 @@ class CLRC663(CardReader):
     # --- 命令执行 ---
 
     def _wait_irq(self, mask: int, timeout: float = 0.5) -> bool:
-        end = time.time() + timeout
-        while time.time() < end:
+        end = time.monotonic() + timeout
+        while True:
             irq = self._read_reg(self.REG_IRQ0)
             if irq is not None and (irq & mask):
                 return True
-            time.sleep(0.002)
-        return False
+            remaining = end - time.monotonic()
+            if remaining <= 0:
+                return False
+            time.sleep(min(self.IRQ_POLL_INTERVAL, remaining))
 
     def _start_command(self, cmd: int, data: bytes = b'', set_tx_num: bool = True):
         self._flush_fifo()

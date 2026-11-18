@@ -12,7 +12,7 @@ class Transport(ABC):
         pass
 
     @abstractmethod
-    def read(self, size: int) -> bytes:
+    def read(self, size: int, timeout: float | None = None) -> bytes:
         """
         从硬件读取指定长度的原始字节数据。
         """

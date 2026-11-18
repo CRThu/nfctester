@@ -20,7 +20,9 @@ class TCPTransport(Transport):
     def write(self, data: bytes):
         self.sock.sendall(data)
 
-    def read(self, size: int) -> bytes:
+    def read(self, size: int, timeout: float | None = None) -> bytes:
+        if timeout is not None:
+            self.sock.settimeout(timeout)
         return self.sock.recv(size)
 
     def flush_input(self):
